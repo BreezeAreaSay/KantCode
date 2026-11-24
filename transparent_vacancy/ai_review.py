@@ -17,7 +17,7 @@ from .rules import GENERIC_VAGUE, Facts
 from .textutil import clean_text, find_quote, fold
 from .vacancy import Vacancy
 
-PROMPT_VERSION = "7"
+PROMPT_VERSION = "8"
 MAX_FIELD_CHARS = 2500
 MAX_QUOTE_CHARS = 200
 MIN_QUOTE_TO_SEARCH = 4  # короче этого цитату в других полях не ищем
@@ -52,6 +52,7 @@ SYSTEM_PROMPT = """Ты помогаешь редактору портала в�
 Не повторяй замечания из known_findings.
 4. problem — в чём проблема для соискателя, одно предложение о процитированной фразе.
 5. recommendation — что именно редактору уточнить у работодателя, одно-два предложения. \
+Начинай со слов «Уточните у работодателя» и держи повелительную форму до конца предложения. \
 Не придумывай факты, цифры и условия, которых нет в вакансии. Не делай выводов о нарушении закона.
 6. Для contradiction заполни second_field и second_quote вторым исходным значением. \
 Для ambiguity оставь их пустыми.

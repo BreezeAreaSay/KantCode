@@ -46,6 +46,15 @@ class LetterTest(unittest.TestCase):
         for number in re.findall(r"\d{2,}", body):
             self.assertIn(number, source)
 
+    def test_advice_written_by_the_model_is_addressed_to_the_employer_too(self):
+        (entry,) = entries(vacancy(employment=None))
+        for advice in ("Уточнить у работодателя, какой график обязателен.", "Уточните у работодателя какой график обязателен."):
+            with self.subTest(advice=advice):
+                entry["findings"][0]["recommendation"] = advice
+                text = build_letter(entry)
+                self.assertIn("Уточните, пожалуйста, какой график обязателен.", text)
+                self.assertNotIn("у работодателя", text)
+
     def test_advice_in_an_unknown_form_is_kept_as_written(self):
         (entry,) = entries(vacancy(employment=None))
         entry["findings"][0]["recommendation"] = "Проверьте, верно ли указан тип занятости."
