@@ -1,7 +1,7 @@
 # Сервис по расписанию вместе с локальной моделью: ни ключей, ни аккаунтов.
 #   docker compose up -d                 — планировщик + Ollama
 #   docker compose run --rm app run      — ручной запуск того же процесса
-#   docker compose run --rm -v ./examples:/examples app check /examples/sample_vacancies.json --out /data/check-report.json
+#   docker compose run --rm -v ./examples:/examples app check /examples/kantkod_sample_vacancies.json --out /data/check-report.json
 services:
   ollama:
     image: ollama/ollama
