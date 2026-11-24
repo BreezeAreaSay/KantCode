@@ -1,4 +1,4 @@
-"""Отчёт одной HTML-страницей: список вакансий, фильтры по теме и виду замечания.
+"""Отчёт одной HTML-страницей: список вакансий, фильтры, письма работодателю.
 
 Страница самодостаточна: данные отчёта встроены в неё, сервер и сеть не нужны.
 Текст из вакансий попадает на страницу только через ``textContent``, поэтому
@@ -8,6 +8,9 @@
 from __future__ import annotations
 
 import json
+import re
+
+from .letters import build_letter
 
 _PAGE = """<!doctype html>
 <html lang="ru">
@@ -61,6 +64,15 @@ _PAGE = """<!doctype html>
   .quote code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .finding p { margin: 4px 0; }
   .advice b { font-weight: 600; }
+  .stat.model b { font-size: 14px; line-height: 1.4; }
+  .actions { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .button { border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 8px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .button.primary { background: var(--accent); color: var(--card); }
+  .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .letter { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+  .letter pre { margin: 0; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .letter .actions { margin: 0; padding: 0 14px 12px; align-items: center; }
+  .copied { color: var(--ok); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -82,9 +94,11 @@ _PAGE = """<!doctype html>
   <div id="list"></div>
 </main>
 <script id="report" type="application/json">__REPORT__</script>
+<script id="letters" type="application/json">__LETTERS__</script>
 <script>
 "use strict";
 const report = JSON.parse(document.getElementById("report").textContent);
+const letters = JSON.parse(document.getElementById("letters").textContent);  // письмо по позиции вакансии или null
 const state = { topic: null, type: null, source: null, text: "", only: false };
 const SOURCES = { rule: "правило", ai: "ИИ" };
 const AI_STATUS = { ok: "разобрал все вакансии", partial: "разобрал часть вакансий", unavailable: "был недоступен", disabled: "выключен" };
@@ -141,17 +155,50 @@ function findingNode(finding) {
   return node;
 }
 
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (error) {  // file:// и старые браузеры: копируем через временное поле
+    const area = el("textarea");
+    area.value = text;
+    area.style.position = "fixed"; area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const done = document.execCommand("copy");
+    area.remove();
+    return done;
+  }
+}
+
+function letterNode(text) {
+  const box = el("div", "letter");
+  box.hidden = true;
+  box.append(el("pre", "", text));
+  const actions = el("div", "actions");
+  const copy = el("button", "button primary", "Скопировать письмо");
+  copy.type = "button";
+  const note = el("span", "copied");
+  note.setAttribute("aria-live", "polite");
+  copy.addEventListener("click", async () => {
+    note.textContent = (await copyText(text)) ? "Скопировано" : "Не удалось скопировать: выделите текст вручную";
+  });
+  actions.append(copy, note);
+  box.append(actions);
+  return box;
+}
+
 function render() {
   const list = document.getElementById("list");
   list.replaceChildren();
   const filtering = state.topic || state.type || state.source;
   const needle = state.text.trim().toLowerCase();
   let shown = 0, findings = 0;
-  for (const vacancy of report.vacancies) {
+  report.vacancies.forEach((vacancy, position) => {
     const visible = vacancy.findings.filter(matches);
-    if ((filtering || state.only) && !visible.length) continue;
+    if ((filtering || state.only) && !visible.length) return;
     const haystack = [vacancy.job_name, vacancy.company, vacancy.id].join(" ").toLowerCase();
-    if (needle && !haystack.includes(needle)) continue;
+    if (needle && !haystack.includes(needle)) return;
     shown += 1; findings += visible.length;
     const card = el("article", "vacancy");
     card.append(el("h2", "", vacancy.job_name || "Без названия"));
@@ -165,8 +212,23 @@ function render() {
     card.append(meta);
     if (!vacancy.findings.length) card.append(el("p", "clean", "Замечаний нет."));
     for (const finding of visible) card.append(findingNode(finding));
+    const letter = letters[position];
+    if (letter) {
+      const box = letterNode(letter);
+      const actions = el("div", "actions");
+      const toggle = el("button", "button", "Письмо работодателю");
+      toggle.type = "button";
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.addEventListener("click", () => {
+        box.hidden = !box.hidden;
+        toggle.setAttribute("aria-expanded", String(!box.hidden));
+        toggle.textContent = box.hidden ? "Письмо работодателю" : "Скрыть письмо";
+      });
+      actions.append(toggle);
+      card.append(actions, box);
+    }
     list.append(card);
-  }
+  });
   document.getElementById("count").textContent = "Показано вакансий: " + shown + ", замечаний: " + findings;
 }
 
@@ -204,9 +266,19 @@ render();
 """
 
 
-def render_html(report: dict) -> str:
-    """HTML-страница с встроенным отчётом."""
-    data = json.dumps(report, ensure_ascii=False)
+def _plain(letter: str | None) -> str | None:
+    """Письмо без разметки Markdown: его вставляют в почту как есть."""
+    if letter is None:
+        return None
+    return re.sub(r"\*\*(.+?)\*\*", r"\1", re.sub(r"^# ", "", letter, flags=re.M)).strip() + "\n"
+
+
+def _embed(value) -> str:
     # Данные лежат внутри <script>: закрывающий тег и комментарий в тексте вакансии не должны его оборвать.
-    data = data.replace("<", "\\u003c")
-    return _PAGE.replace("__REPORT__", data)
+    return json.dumps(value, ensure_ascii=False).replace("<", "\\u003c")
+
+
+def render_html(report: dict) -> str:
+    """HTML-страница с встроенным отчётом и письмами работодателю по нему."""
+    letters = [_plain(build_letter(entry)) if isinstance(entry, dict) else None for entry in report.get("vacancies") or []]
+    return _PAGE.replace("__LETTERS__", _embed(letters)).replace("__REPORT__", _embed(report))
