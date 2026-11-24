@@ -266,7 +266,10 @@ def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts, strict
 
 def review(
     client: ChatClient, vacancy: Vacancy, known: list[Finding], facts: Facts, strict: bool = True
-) -> list[Finding]:
-    """Спрашивает модель и возвращает только проверенные замечания. Сбой модели — ``AIError``."""
-    reply = client.complete_json(SYSTEM_PROMPT, build_request(vacancy, known))
-    return validate(reply.get("findings"), vacancy, known, facts, strict)
+) -> tuple[list[Finding], str]:
+    """Спрашивает модель. Возвращает только проверенные замечания и модель, которая ответила.
+
+    Сбой всех моделей — ``AIError``.
+    """
+    reply, model = client.ask(SYSTEM_PROMPT, build_request(vacancy, known))
+    return validate(reply.get("findings"), vacancy, known, facts, strict), model

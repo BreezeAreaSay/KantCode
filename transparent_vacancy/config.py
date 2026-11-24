@@ -60,6 +60,7 @@ class Settings:
     ai_enabled: bool = True
     ai_base_url: str = "http://localhost:11434/v1"
     ai_model: str = "qwen2.5:7b"
+    ai_fallback_models: tuple[str, ...] = ()  # запасные модели: «модель» или «модель@адрес-сервера»
     ai_api_key: str = ""
     ai_timeout: int = 180
     ai_retries: int = 3  # попыток на один запрос к модели: бесплатные серверы часто просят подождать
@@ -87,6 +88,9 @@ class Settings:
             ai_enabled=_flag(text("TV_AI_ENABLED", "true")),
             ai_base_url=text("TV_AI_BASE_URL", base.ai_base_url).rstrip("/"),
             ai_model=text("TV_AI_MODEL", base.ai_model),
+            ai_fallback_models=tuple(
+                item.strip() for item in text("TV_AI_FALLBACK_MODELS", "").split(",") if item.strip()
+            ),
             ai_api_key=text("TV_AI_API_KEY", ""),
             ai_timeout=_integer("TV_AI_TIMEOUT", text("TV_AI_TIMEOUT", str(base.ai_timeout)), 1),
             ai_retries=_integer("TV_AI_RETRIES", text("TV_AI_RETRIES", str(base.ai_retries)), 1),

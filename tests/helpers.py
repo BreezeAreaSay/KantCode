@@ -115,8 +115,11 @@ class FakeModel(_Server):
 
     def __init__(self, reply=lambda fields: []):
         self.reply = reply
-        self.calls = 0
+        self.calls = 0  # запросы по вакансиям
+        self.probes = 0  # проверки связи перед разбором
         self.fail = False
+        self.fail_models: set[str] = set()  # модели, которые отвечают «занято»
+        self.asked: list[str] = []  # какая модель названа в каждом запросе по вакансии
         model = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -125,13 +128,21 @@ class FakeModel(_Server):
 
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode("utf-8"))
-                model.calls += 1
-                if model.fail:
+                probe = "response_format" not in body and len(body["messages"]) == 1
+                if probe:
+                    model.probes += 1
+                else:
+                    model.calls += 1
+                    model.asked.append(body.get("model"))
+                if model.fail or body.get("model") in model.fail_models:
                     self.send_response(503)
                     self.end_headers()
                     return
-                request = json.loads(body["messages"][-1]["content"])
-                content = json.dumps({"findings": model.reply(request["fields"])}, ensure_ascii=False)
+                if probe:
+                    content = "ok"
+                else:
+                    request = json.loads(body["messages"][-1]["content"])
+                    content = json.dumps({"findings": model.reply(request["fields"])}, ensure_ascii=False)
                 data = json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
