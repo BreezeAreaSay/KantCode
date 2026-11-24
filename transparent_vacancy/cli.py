@@ -268,7 +268,28 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+QUICK_START = """Прозрачная вакансия: отчёт о том, насколько понятно описаны условия работы.
+
+Проверить файл с вакансиями в формате API (отчёт в report.json):
+  python -m transparent_vacancy check examples/kantkod_sample_vacancies.json --out report.json
+
+Загрузить вакансии региона 39 с портала и сохранить отчёт (reports/report.json):
+  python -m transparent_vacancy run
+
+Посмотреть отчёт страницей в браузере (report.html рядом с отчётом):
+  python -m transparent_vacancy html --report report.json
+
+Модель для шага ИИ: впишите бесплатный ключ OpenRouter в TV_AI_API_KEY (файл .env)
+или запустите локальную Ollama. Без модели отчёт строится на правилах.
+Все команды: python -m transparent_vacancy --help
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if not [item for item in argv if not item.startswith("-") or item in ("-h", "--help")] and "--version" not in argv:
+        print(QUICK_START)
+        return EXIT_OK
     args = build_parser().parse_args(argv)
     try:
         settings = Settings.load(args.env_file)
