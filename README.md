@@ -40,14 +40,15 @@ python -m transparent_vacancy check путь/к/файлу.json --out report.jso
 (нужна бесплатная регистрация и ключ, покупка не нужна):
 
 ```bash
-export TV_AI_BASE_URL=https://openrouter.ai/api/v1
-export TV_AI_MODEL='nvidia/nemotron-3-ultra-550b-a55b:free'
-export TV_AI_FALLBACK_MODELS='nvidia/nemotron-3.5-lightning:free'
-export TV_AI_API_KEY='<ваш ключ>'
-export TV_AI_TIMEOUT=600
+export TV_AI_API_KEY='<ваш ключ>'           # или строка TV_AI_API_KEY=... в файле .env
 python -m transparent_vacancy models        # какие модели отвечают прямо сейчас
 python -m transparent_vacancy check путь/к/файлу.json --out report.json --require-ai
 ```
+
+Одного ключа достаточно: без адреса сервера он считается ключом OpenRouter, и
+сервис сам берёт `https://openrouter.ai/api/v1`, модель
+`nvidia/nemotron-3-ultra-550b-a55b:free` и запасную
+`nvidia/nemotron-3.5-lightning:free`.
 
 Именно так получен пример отчёта в `examples/`: 10 учебных вакансий, около
 четырёх минут, модель ответила на все.
@@ -73,6 +74,45 @@ python -m transparent_vacancy check examples/kantkod_sample_vacancies.json --out
 - `kantkod_sample_vacancies.json` — учебный пример организаторов, 10 вакансий;
 - `sample_vacancies.json` — наш набор: 13 вакансий региона 39 с портала без контактов и 6 вакансий с
   заранее известными дефектами.
+
+## Запуск в Docker
+
+Ничего, кроме Docker, ставить не нужно. Сервису нужна только модель, и способов два.
+
+**Способ А: токен.** Скопируйте `.env.example` в `.env` и впишите ключ OpenRouter
+в строку `TV_AI_API_KEY=`. Больше ничего менять не нужно.
+
+```bash
+cp .env.example .env        # в Windows: copy .env.example .env
+docker compose run --rm app models
+docker compose run --rm app check /examples/kantkod_sample_vacancies.json --out /data/report.json --require-ai
+```
+
+**Способ Б: локальная модель.** Ключ не нужен. Добавьте к командам
+`--profile local`: поднимется Ollama и один раз скачается модель `qwen2.5:7b`
+(около 5 ГБ вместе с образом).
+
+```bash
+docker compose --profile local run --rm app models
+docker compose --profile local run --rm app check /examples/kantkod_sample_vacancies.json --out /data/report.json --require-ai
+```
+
+Остальные команды одинаковы для обоих способов (для способа Б с `--profile local`):
+
+```bash
+docker compose run --rm app run                                   # рабочий режим один раз
+docker compose up -d                                              # рабочий режим по расписанию
+docker compose run --rm app html --report /data/report.json       # отчёт страницей
+docker compose run --rm app letters --report /data/report.json    # письма работодателям
+```
+
+- Отчёты появляются в каталоге `reports/` рядом с `docker-compose.yml` (в контейнере это `/data`).
+- Свой файл для проверки положите в каталог `input/`: в контейнере он виден как `/input/<имя файла>`.
+- Если Ollama уже установлена на самой машине, профиль не нужен: впишите в `.env`
+  `TV_AI_BASE_URL=http://host.docker.internal:11434/v1`.
+- Оба способа можно совместить: с ключом и профилем `local` допишите в `.env`
+  `TV_AI_FALLBACK_MODELS=qwen2.5:7b@http://ollama:11434/v1`, и после дневного
+  лимита OpenRouter вакансии пойдут локальной модели.
 
 ## ИИ
 
@@ -101,7 +141,7 @@ OpenAI-совместимый `/chat/completions`. Настройки: `TV_AI_BA
 | Способ | Настройки | Что нужно |
 | --- | --- | --- |
 | Локальная Ollama (по умолчанию) | `TV_AI_BASE_URL=http://localhost:11434/v1`, `TV_AI_MODEL=qwen2.5:7b` | Установить [Ollama](https://ollama.com), выполнить `ollama pull qwen2.5:7b` (4,7 ГБ). Ключ не нужен. |
-| OpenRouter, бесплатная модель | `TV_AI_BASE_URL=https://openrouter.ai/api/v1`, `TV_AI_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free`, `TV_AI_API_KEY=<ключ>`, `TV_AI_TIMEOUT=600` | Бесплатная регистрация на openrouter.ai и ключ. Покупка не нужна. |
+| OpenRouter, бесплатная модель | `TV_AI_API_KEY=<ключ>`; адрес, модель `nvidia/nemotron-3-ultra-550b-a55b:free`, запасная модель и время ожидания 600 секунд подставляются сами | Бесплатная регистрация на openrouter.ai и ключ. Покупка не нужна. |
 | Любой другой совместимый провайдер | свои адрес, модель и ключ | — |
 
 Обе названные модели с открытыми весами: Qwen 2.5 (Alibaba) и Nemotron 3 Ultra (NVIDIA).
@@ -201,7 +241,7 @@ python -m transparent_vacancy schedule --run-on-start  # сначала выпо
 
 Готовые конфигурации расписания:
 
-- `docker-compose.yml` — сервис по расписанию вместе с локальной моделью: `docker compose up -d`;
+- `docker-compose.yml` — сервис по расписанию в Docker: `docker compose up -d`, подробности в разделе [«Запуск в Docker»](#запуск-в-docker);
 - системный cron: `0 6 * * * cd /путь/к/KantCode && python -m transparent_vacancy run`.
 
 ## Настройки
@@ -218,11 +258,13 @@ python -m transparent_vacancy schedule --run-on-start  # сначала выпо
 | `TV_HTTP_TIMEOUT` | `60` | секунд на один запрос к порталу |
 | `TV_HTTP_RETRIES` | `3` | попыток на один запрос к порталу |
 | `TV_AI_ENABLED` | `true` | использовать ли модель |
-| `TV_AI_BASE_URL` | `http://localhost:11434/v1` | адрес сервера модели |
-| `TV_AI_MODEL` | `qwen2.5:7b` | модель |
-| `TV_AI_FALLBACK_MODELS` | пусто | запасные модели через запятую: `модель` или `модель@адрес-сервера` |
-| `TV_AI_API_KEY` | пусто | ключ провайдера |
-| `TV_AI_TIMEOUT` | `180` | секунд на один ответ модели |
+| `TV_AI_BASE_URL` | `http://localhost:11434/v1`; если задан только ключ, `https://openrouter.ai/api/v1` | адрес сервера модели |
+| `TV_AI_MODEL` | `qwen2.5:7b`; если задан только ключ, `nvidia/nemotron-3-ultra-550b-a55b:free` | модель |
+| `TV_AI_LOCAL_MODEL` | `qwen2.5:7b` | локальная модель: её скачивает профиль `local` в Docker, и она же берётся, когда нет ни ключа, ни `TV_AI_MODEL` |
+| `TV_AI_LOCAL_URL` | `http://localhost:11434/v1` | адрес локальной модели, когда `TV_AI_BASE_URL` не задан; в Docker его задаёт `docker-compose.yml` |
+| `TV_AI_FALLBACK_MODELS` | пусто; если задан только ключ, `nvidia/nemotron-3.5-lightning:free` | запасные модели через запятую: `модель` или `модель@адрес-сервера` |
+| `TV_AI_API_KEY` | пусто | ключ провайдера; без `TV_AI_BASE_URL` считается ключом OpenRouter |
+| `TV_AI_TIMEOUT` | `180`; с ключом OpenRouter и в Docker `600` | секунд на один ответ модели |
 | `TV_AI_RETRIES` | `3` | попыток на один запрос к модели, если сервер занят или просит подождать (429, 503) |
 | `TV_AI_WORKERS` | `2` | сколько вакансий разбирать одновременно |
 | `TV_AI_MAX_VACANCIES` | `0` | сколько вакансий отдавать модели за запуск, 0 — все |
@@ -396,7 +438,7 @@ python -m unittest discover -s tests -t .
 - Правила осторожны: сомнительный случай они пропускают, чтобы не давать ложных замечаний.
 - Качество замечаний ИИ зависит от модели. Небольшая локальная модель находит меньше, чем крупная облачная.
 - Расписание считает время по часам машины (переменная `TZ`).
-- `docker-compose.yml` написан, но при разработке не запускался: Docker на машине разработки не было.
+- Docker на машине разработки не было. `docker-compose.yml` проверен командой `docker compose config` (состав служб с профилем и без, окружение контейнера), и сервис запускался с этим окружением без контейнера. Сами контейнеры при разработке не собирались и не запускались.
 - На скорость работы над заданием повлияли долгое скачивание локальных моделей (одна `qwen2.5:7b` весит 4,7 ГБ) и слабый интернет. Если интернет медленный и у вас, для шага ИИ удобнее способ с OpenRouter из раздела [«ИИ»](#ии): скачивать ничего не нужно.
 
 ## Вклад участников

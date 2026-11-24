@@ -1,42 +1,79 @@
-# Сервис по расписанию вместе с локальной моделью: ни ключей, ни аккаунтов.
-#   docker compose up -d                 — планировщик + Ollama
-#   docker compose run --rm app run      — ручной запуск того же процесса
-#   docker compose run --rm -v ./examples:/examples app check /examples/kantkod_sample_vacancies.json --out /data/check-report.json
+# Сервис целиком в Docker. Ему нужна только модель, способов два:
+#
+#   А. Токен.           Скопируйте .env.example в .env и впишите ключ в TV_AI_API_KEY.
+#   Б. Локальная модель. Ключ не нужен: добавляйте к командам --profile local,
+#                        Ollama и модель скачаются сами (первый раз около 5 ГБ).
+#
+# Команды (для способа Б после «docker compose» добавьте «--profile local»):
+#   docker compose run --rm app models      какие модели отвечают
+#   docker compose run --rm app check /examples/kantkod_sample_vacancies.json --out /data/report.json
+#   docker compose run --rm app run         рабочий режим один раз
+#   docker compose up -d                    рабочий режим по расписанию
+#
+# Отчёты появляются в ./reports. Свой файл для проверки положите в ./input,
+# в контейнере он виден как /input/<имя файла>.
 services:
+  app:
+    build: .
+    environment:
+      TV_SOURCE_URL: ${TV_SOURCE_URL:-}
+      TV_MAX_VACANCIES: ${TV_MAX_VACANCIES:-}
+      TV_PAGE_SIZE: ${TV_PAGE_SIZE:-}
+      TV_SCHEDULE: ${TV_SCHEDULE:-}
+      TV_HTTP_TIMEOUT: ${TV_HTTP_TIMEOUT:-}
+      TV_HTTP_RETRIES: ${TV_HTTP_RETRIES:-}
+      TV_AI_ENABLED: ${TV_AI_ENABLED:-}
+      TV_AI_API_KEY: ${TV_AI_API_KEY:-}
+      TV_AI_BASE_URL: ${TV_AI_BASE_URL:-}
+      TV_AI_MODEL: ${TV_AI_MODEL:-}
+      TV_AI_FALLBACK_MODELS: ${TV_AI_FALLBACK_MODELS:-}
+      TV_AI_TIMEOUT: ${TV_AI_TIMEOUT:-600}
+      TV_AI_RETRIES: ${TV_AI_RETRIES:-}
+      TV_AI_WORKERS: ${TV_AI_WORKERS:-}
+      TV_AI_MAX_VACANCIES: ${TV_AI_MAX_VACANCIES:-}
+      TV_AI_STRICT: ${TV_AI_STRICT:-}
+      # Без ключа сервис идёт к локальной модели: в Docker это соседний контейнер ollama.
+      TV_AI_LOCAL_URL: http://ollama:11434/v1
+      TV_AI_LOCAL_MODEL: ${TV_AI_LOCAL_MODEL:-qwen2.5:7b}
+      TV_OUTPUT_DIR: /data
+      TZ: ${TZ:-Europe/Kaliningrad}
+    volumes:
+      - ./reports:/data
+      - ./examples:/examples:ro
+      - ./input:/input:ro
+    extra_hosts:
+      # чтобы достать Ollama, установленную на самой машине: TV_AI_BASE_URL=http://host.docker.internal:11434/v1
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      # Ждём скачивания модели только при --profile local; без профиля этой службы нет.
+      model:
+        condition: service_completed_successfully
+        required: false
+    restart: unless-stopped
+
   ollama:
+    profiles: ["local"]
     image: ollama/ollama
     volumes:
       - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
 
-  # Один раз скачивает модель и завершается.
+  # Один раз скачивает локальную модель и завершается.
   model:
+    profiles: ["local"]
     image: ollama/ollama
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["ollama", "pull", "${TV_AI_MODEL:-qwen2.5:7b}"]
+    entrypoint: ["ollama", "pull", "${TV_AI_LOCAL_MODEL:-qwen2.5:7b}"]
     restart: "no"
-
-  app:
-    build: .
-    depends_on:
-      model:
-        condition: service_completed_successfully
-    environment:
-      TV_SOURCE_URL: ${TV_SOURCE_URL:-http://opendata.trudvsem.ru/api/v1/vacancies/region/39}
-      TV_MAX_VACANCIES: ${TV_MAX_VACANCIES:-100}
-      TV_PAGE_SIZE: ${TV_PAGE_SIZE:-50}
-      TV_SCHEDULE: ${TV_SCHEDULE:-0 6 * * *}
-      TV_AI_BASE_URL: ${TV_AI_BASE_URL:-http://ollama:11434/v1}
-      TV_AI_MODEL: ${TV_AI_MODEL:-qwen2.5:7b}
-      TV_AI_FALLBACK_MODELS: ${TV_AI_FALLBACK_MODELS:-}
-      TV_AI_API_KEY: ${TV_AI_API_KEY:-}
-      TV_AI_TIMEOUT: ${TV_AI_TIMEOUT:-600}
-      TZ: Europe/Kaliningrad
-    volumes:
-      - ./reports:/data
-    restart: unless-stopped
 
 volumes:
   ollama:

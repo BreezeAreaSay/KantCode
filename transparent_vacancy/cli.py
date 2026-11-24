@@ -26,6 +26,11 @@ EXIT_USAGE = 1
 EXIT_SOURCE = 2
 EXIT_AI = 3
 
+NO_MODEL_HINT = (
+    "Подсказка: впишите ключ в TV_AI_API_KEY (файл .env) или запустите локальную модель: "
+    "в Docker добавьте --profile local, без Docker выполните ollama pull qwen2.5:7b"
+)
+
 
 def log(message: str) -> None:
     print(f"[{datetime.now():%H:%M:%S}] {message}", file=sys.stderr, flush=True)
@@ -51,6 +56,8 @@ def _summary(report: dict, path: Path) -> None:
         log(f"ИИ: вакансий по моделям — {used}")
     if ai["error"]:
         log(f"ИИ, последняя ошибка: {ai['error']}")
+    if ai["status"] == "unavailable":
+        log(NO_MODEL_HINT)
 
 
 def _ai_missing(report: dict, require_ai: bool) -> bool:
@@ -199,6 +206,7 @@ def check_models(settings: Settings) -> int:
     working = [label for label, state in results if state == "ok"]
     if not working:
         log("ОШИБКА: ни одна модель не отвечает")
+        log(NO_MODEL_HINT)
         return EXIT_AI
     log(f"разбор начнётся с модели {working[0]}")
     return EXIT_OK
