@@ -232,14 +232,18 @@ class ChatClient:
         """Один запрос к модели, ответ как JSON-объект."""
         return self.ask(system, user)[0]
 
-    def probe(self) -> list[tuple[str, str]]:
+    def probe(self, first_only: bool = False) -> list[tuple[str, str]]:
         """Заранее проверяет коротким запросом, какие модели отвечают.
 
         Возвращает пары (модель, «ok» или текст ошибки). Модель, которая не ответила,
-        откладывается: запросы по вакансиям пойдут сразу к рабочим.
+        откладывается: запросы по вакансиям пойдут сразу к рабочим. С ``first_only``
+        проверка идёт по порядку до первой ответившей: запасные модели не тратят
+        запросы и не загружаются в память, пока до них не дошла очередь.
         """
         results: list[tuple[str, str]] = []
         for target in self.targets:
+            if first_only and results and results[-1][1] == "ok":
+                break
             body = {
                 "model": target.model,
                 "temperature": 0,

@@ -319,6 +319,13 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(client.ask("s", "u")[1], "backup")
         self.assertEqual(server.asked, ["backup"])  # к нерабочим моделям запрос по вакансии не уходит
 
+    def test_probe_can_stop_at_the_first_model_that_answers(self):
+        server = ModelsByName(main=BUSY, backup=GOOD, third=GOOD)
+        self.addCleanup(server.close)
+        client = ChatClient(server.url + "/v1", "main", timeout=5, fallbacks=("backup", "third"))
+        self.assertEqual([label for label, _ in client.probe(first_only=True)], ["main", "backup"])
+        self.assertEqual(server.asked, ["main", "backup"])  # до третьей модели очередь не дошла
+
     def test_probe_is_a_short_request_without_the_vacancy(self):
         server = ScriptedModel((200, chat("ok")))
         self.addCleanup(server.close)

@@ -256,6 +256,15 @@ class FallbackModelsTest(CliCase):
         self.assertEqual((ai["models_used"], ai["models_checked"]), ({"stub": 6}, {}))
         self.assertEqual({item["ai_model"] for item in self.report()["vacancies"]}, {"stub"})
 
+    def test_spare_models_are_not_touched_while_the_main_one_answers(self):
+        os.environ["TV_AI_FALLBACK_MODELS"] = "backup, third"
+        code, output = self.call("run", "--require-ai")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.model.probes, 1)  # проверена только основная: она ответила
+        self.assertNotIn("проверка модели backup", output)
+        self.assertEqual(self.report()["meta"]["ai"]["models_checked"], {"stub": "ok"})
+        self.assertEqual(set(self.model.asked), {"stub"})
+
     def test_models_are_not_checked_without_ai(self):
         self.call("run", "--no-ai")
         self.assertEqual((self.model.probes, self.model.calls), (0, 0))
