@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прозрачная вакансия — отчёт</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c2330; --muted: #5d6778; --line: #dfe3ea;
+    --accent: #1f5fbf; --gap: #b3261e; --ambiguity: #8a5a00; --contradiction: #6a3fb5; --ok: #1e7a46;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa4b5; --line: #2c3340;
+      --accent: #7fb0ff; --gap: #ff8a80; --ambiguity: #f0b952; --contradiction: #b99cf5; --ok: #6fd39b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; overflow-wrap: anywhere; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 24px; line-height: 1.2; overflow-wrap: anywhere; }
+  .stat.model b { font-size: 17px; line-height: 1.7; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .filters { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 20px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .row:last-child { margin-bottom: 0; }
+  .row > .label { color: var(--muted); font-size: 13px; width: 86px; flex: none; }
+  .chip { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+  .chip:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  input[type="search"] { flex: 1; min-width: 200px; border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 8px; padding: 7px 10px; font: inherit; }
+  label.check { font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  .count { color: var(--muted); margin: 0 0 12px; }
+  .vacancy { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .vacancy h2 { font-size: 17px; margin: 0; overflow-wrap: anywhere; }
+  .vacancy .meta { color: var(--muted); font-size: 13px; margin: 2px 0 0; overflow-wrap: anywhere; }
+  .vacancy a { color: var(--accent); }
+  .clean { color: var(--ok); margin: 10px 0 0; font-size: 14px; }
+  .finding { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; font-size: 12px; }
+  .tag { border-radius: 6px; padding: 1px 8px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.gap { color: var(--gap); border-color: var(--gap); }
+  .tag.ambiguity { color: var(--ambiguity); border-color: var(--ambiguity); }
+  .tag.contradiction { color: var(--contradiction); border-color: var(--contradiction); }
+  .quote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--line); color: var(--muted); overflow-wrap: anywhere; }
+  .quote code { font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .finding p { margin: 4px 0; }
+  .advice b { font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Прозрачная вакансия</h1>
+  <p class="sub" id="sub"></p>
+  <section class="stats" id="stats" aria-label="Сводка"></section>
+  <section class="filters" aria-label="Фильтры">
+    <div class="row"><span class="label">Тема</span><span id="topics" class="row" style="margin:0"></span></div>
+    <div class="row"><span class="label">Вид</span><span id="types" class="row" style="margin:0"></span></div>
+    <div class="row"><span class="label">Кто нашёл</span><span id="sources" class="row" style="margin:0"></span></div>
+    <div class="row">
+      <span class="label">Поиск</span>
+      <input type="search" id="search" placeholder="Должность, работодатель или ID" aria-label="Поиск по должности, работодателю или ID">
+      <label class="check"><input type="checkbox" id="only"> только с замечаниями</label>
+    </div>
+  </section>
+  <p class="count" id="count" aria-live="polite"></p>
+  <div id="list"></div>
+</main>
+<script id="report" type="application/json">{"meta": {"generated_at": "2026-11-24T15:52:23+00:00", "tool_version": "1.0.0", "mode": "file", "source": "examples/kantkod_sample_vacancies.json", "vacancies_received": 10, "duplicates_merged": 0, "vacancies": 10, "vacancies_with_findings": 6, "findings_total": 17, "findings_by_topic": {"duties": 2, "location": 5, "requirements": 4, "salary": 1, "schedule": 3, "title": 2}, "findings_by_type": {"ambiguity": 10, "contradiction": 4, "gap": 3}, "ai": {"status": "ok", "base_url": "https://openrouter.ai/api/v1", "model": "nvidia/nemotron-3-ultra-550b-a55b:free", "vacancies_reviewed": 10, "vacancies_from_cache": 0, "vacancies_failed": 0, "vacancies_skipped": 0, "findings": 2, "error": ""}}, "vacancies": [{"id": "DEMO-39-001", "url": null, "job_name": "Специалист по документообороту", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": []}, {"id": "DEMO-39-002", "url": null, "job_name": "Помощник администратора", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "duties", "topic_title": "Обязанности", "type": "ambiguity", "type_title": "Неоднозначность", "field": "duty", "quote": "Выполнение различных поручений руководителя.", "problem": "Обязанности описаны общими словами: не названа ни одна конкретная задача.", "recommendation": "Попросите работодателя перечислить конкретные задачи и участок работы.", "detected_by": "rule"}, {"topic": "requirements", "topic_title": "Требования", "type": "gap", "type_title": "Пропуск", "field": "requirement.education", "quote": "", "problem": "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня образования, ни конкретных знаний и навыков.", "recommendation": "Уточните у работодателя требуемый уровень образования и обязательные знания или навыки либо отметьте, что требований к образованию нет.", "detected_by": "rule"}, {"topic": "salary", "topic_title": "Оплата", "type": "gap", "type_title": "Пропуск", "field": "salary", "quote": "", "problem": "Размер оплаты не указан ни в полях зарплаты, ни в описании.", "recommendation": "Попросите работодателя указать размер оплаты: сумму или вилку в рублях.", "detected_by": "rule"}, {"topic": "schedule", "topic_title": "График", "type": "ambiguity", "type_title": "Неоднозначность", "field": "schedule", "quote": "Гибкий график", "problem": "Формулировка о графике не называет рабочие дни и часы, а конкретного расписания нет ни в одном поле.", "recommendation": "Уточните у работодателя рабочие дни, время начала и окончания работы и то, кто и как согласует график.", "detected_by": "rule"}, {"topic": "location", "topic_title": "Место работы", "type": "ambiguity", "type_title": "Неоднозначность", "field": "addresses.address[0].location", "quote": "г. Калининград", "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.", "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.", "detected_by": "rule"}]}, {"id": "DEMO-39-003", "url": null, "job_name": "Младший аналитик данных", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "requirements", "topic_title": "Требования", "type": "contradiction", "type_title": "Противоречие", "field": "requirement.experience", "quote": "0", "problem": "Требуемый опыт указан по-разному: в поле опыта 0 (лет), в тексте — от 5.", "recommendation": "Уточните у работодателя, какой опыт работы действительно обязателен, и приведите оба места к одному значению.", "detected_by": "rule", "conflict": [{"field": "requirement.experience", "value": "0"}, {"field": "requirement.qualification", "value": "не менее 5 лет опыта"}]}, {"topic": "location", "topic_title": "Место работы", "type": "ambiguity", "type_title": "Неоднозначность", "field": "addresses.address[0].location", "quote": "г. Черняховск", "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.", "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.", "detected_by": "rule"}, {"topic": "title", "topic_title": "Название должности", "type": "contradiction", "type_title": "Противоречие", "field": "job-name", "quote": "Младший аналитик данных", "problem": "Название должности «Младший аналитик данных» противоречит требованию о 5-летнем опыте работы.", "recommendation": "Уточните у работодателя, соответствует ли должность уровню «младший» или требуется опытный аналитик, и скорректируйте название или требования.", "detected_by": "ai", "conflict": [{"field": "job-name", "value": "Младший аналитик данных"}, {"field": "requirement.qualification", "value": "Требуется не менее 5 лет опыта работы аналитиком данных"}]}]}, {"id": "DEMO-39-004", "url": null, "job_name": "Оператор контактного центра", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "location", "topic_title": "Место работы", "type": "contradiction", "type_title": "Противоречие", "field": "duty", "quote": "полностью дистанционная", "problem": "Место работы указано по-разному: в одном месте работа полностью дистанционная, в другом обязательно присутствие в офисе.", "recommendation": "Уточните у работодателя, где выполняется работа: дистанционно или в офисе, и приведите описание к одному варианту.", "detected_by": "rule", "conflict": [{"field": "duty", "value": "полностью дистанционная"}, {"field": "requirement.qualification", "value": "Обязательное ежедневное присутствие в офисе"}]}]}, {"id": "DEMO-39-005", "url": null, "job_name": "Библиотекарь", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": []}, {"id": "DEMO-39-006", "url": null, "job_name": "Специалист", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "title", "topic_title": "Название должности", "type": "ambiguity", "type_title": "Неоднозначность", "field": "job-name", "quote": "Специалист", "problem": "Название должности общее: по нему нельзя понять направление работы и подразделение.", "recommendation": "Уточните у работодателя полное название должности с направлением или участком работы.", "detected_by": "rule"}, {"topic": "duties", "topic_title": "Обязанности", "type": "ambiguity", "type_title": "Неоднозначность", "field": "duty", "quote": "Работа с документами и другие задачи по необходимости.", "problem": "Обязанности описаны общими словами: не названа ни одна конкретная задача.", "recommendation": "Попросите работодателя перечислить конкретные задачи и участок работы.", "detected_by": "rule"}, {"topic": "requirements", "topic_title": "Требования", "type": "gap", "type_title": "Пропуск", "field": "requirement.education", "quote": "", "problem": "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня образования, ни конкретных знаний и навыков.", "recommendation": "Уточните у работодателя требуемый уровень образования и обязательные знания или навыки либо отметьте, что требований к образованию нет.", "detected_by": "rule"}, {"topic": "schedule", "topic_title": "График", "type": "ambiguity", "type_title": "Неоднозначность", "field": "schedule", "quote": "Сменный график", "problem": "Указан сменный режим, но конкретного расписания нет ни в полях, ни в описании: неизвестны длительность смен и порядок чередования.", "recommendation": "Уточните у работодателя длительность смены, время начала и окончания и порядок чередования рабочих и выходных дней.", "detected_by": "rule"}, {"topic": "location", "topic_title": "Место работы", "type": "ambiguity", "type_title": "Неоднозначность", "field": "addresses.address[0].location", "quote": "Калининградская область", "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.", "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.", "detected_by": "rule"}]}, {"id": "DEMO-39-007", "url": null, "job_name": "Инженер технической поддержки", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": []}, {"id": "DEMO-39-008", "url": null, "job_name": "Координатор проектов", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "schedule", "topic_title": "График", "type": "ambiguity", "type_title": "Неоднозначность", "field": "requirement.qualification", "quote": "Возможен гибкий график", "problem": "Расписание названо, но рядом сказано, что возможен гибкий график: неясно, кому и на каких условиях он доступен.", "recommendation": "Уточните у работодателя, обязательно ли названное расписание и по каким правилам согласуется гибкий график.", "detected_by": "rule"}]}, {"id": "DEMO-39-009", "url": null, "job_name": "Оператор ввода данных", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": []}, {"id": "DEMO-39-010", "url": null, "job_name": "Методист образовательных программ", "company": "Учебная организация «Балтика»", "ai_reviewed": true, "findings": [{"topic": "location", "topic_title": "Место работы", "type": "ambiguity", "type_title": "Неоднозначность", "field": "addresses.address[0].location", "quote": "г. Калининград", "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.", "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.", "detected_by": "rule"}, {"topic": "requirements", "topic_title": "Требования", "type": "contradiction", "type_title": "Противоречие", "field": "requirements", "quote": "Опыт разработки учебных материалов", "problem": "В тексте требований указано, что нужен опыт разработки учебных материалов, а в поле опыта работы стоит «0», что может означать отсутствие требований к стажу.", "recommendation": "Уточните у работодателя, требуется ли опыт разработки учебных материалов и если да, то какой минимальный стаж работы.", "detected_by": "ai", "conflict": [{"field": "requirements", "value": "Опыт разработки учебных материалов"}, {"field": "requirement.experience", "value": "0"}]}]}]}</script>
+<script>
+"use strict";
+const report = JSON.parse(document.getElementById("report").textContent);
+const state = { topic: null, type: null, source: null, text: "", only: false };
+const SOURCES = { rule: "правило", ai: "ИИ" };
+const AI_STATUS = { ok: "разобрал все вакансии", partial: "разобрал часть вакансий", unavailable: "был недоступен", disabled: "выключен" };
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function chips(holderId, key, options) {
+  const holder = document.getElementById(holderId);
+  for (const [value, label] of [[null, "все"], ...options]) {
+    const button = el("button", "chip", label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(state[key] === value));
+    button.addEventListener("click", () => {
+      state[key] = value;
+      for (const other of holder.children) other.setAttribute("aria-pressed", String(other === button));
+      render();
+    });
+    holder.append(button);
+  }
+}
+
+function matches(finding) {
+  return (!state.topic || finding.topic === state.topic)
+    && (!state.type || finding.type === state.type)
+    && (!state.source || finding.detected_by === state.source);
+}
+
+function quoteBlock(field, value) {
+  const block = el("div", "quote");
+  block.append(el("code", "", field), document.createTextNode(value ? ": «" + value + "»" : ": сведений нет"));
+  return block;
+}
+
+function findingNode(finding) {
+  const node = el("div", "finding");
+  const tags = el("div", "tags");
+  tags.append(el("span", "tag", finding.topic_title), el("span", "tag " + finding.type, finding.type_title),
+    el("span", "tag", "нашёл: " + (SOURCES[finding.detected_by] || finding.detected_by)));
+  node.append(tags);
+  if (finding.type === "contradiction" && Array.isArray(finding.conflict)) {
+    for (const side of finding.conflict) node.append(quoteBlock(side.field, side.value));
+  } else {
+    node.append(quoteBlock(finding.field, finding.quote));
+  }
+  node.append(el("p", "", finding.problem));
+  const advice = el("p", "advice");
+  advice.append(el("b", "", "Что уточнить: "), document.createTextNode(finding.recommendation));
+  node.append(advice);
+  return node;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.replaceChildren();
+  const filtering = state.topic || state.type || state.source;
+  const needle = state.text.trim().toLowerCase();
+  let shown = 0, findings = 0;
+  for (const vacancy of report.vacancies) {
+    const visible = vacancy.findings.filter(matches);
+    if ((filtering || state.only) && !visible.length) continue;
+    const haystack = [vacancy.job_name, vacancy.company, vacancy.id].join(" ").toLowerCase();
+    if (needle && !haystack.includes(needle)) continue;
+    shown += 1; findings += visible.length;
+    const card = el("article", "vacancy");
+    card.append(el("h2", "", vacancy.job_name || "Без названия"));
+    const meta = el("p", "meta", [vacancy.company, "ID " + (vacancy.id || "не указан")].filter(Boolean).join(" · "));
+    if (vacancy.url && /^https?:\/\//.test(vacancy.url)) {
+      const link = el("a", "", "карточка на портале");
+      link.href = vacancy.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+      meta.append(" · ", link);
+    }
+    if (!vacancy.ai_reviewed) meta.append(" · без разбора ИИ");
+    card.append(meta);
+    if (!vacancy.findings.length) card.append(el("p", "clean", "Замечаний нет."));
+    for (const finding of visible) card.append(findingNode(finding));
+    list.append(card);
+  }
+  document.getElementById("count").textContent = "Показано вакансий: " + shown + ", замечаний: " + findings;
+}
+
+const meta = report.meta || {};
+const ai = meta.ai || {};
+document.getElementById("sub").textContent = "Отчёт от " + (meta.generated_at || "—") + " · источник: " + (meta.source || "—");
+for (const [value, label] of [
+  [meta.vacancies, "вакансий в отчёте"],
+  [meta.vacancies_with_findings, "с замечаниями"],
+  [meta.findings_total, "замечаний всего"],
+  [ai.findings, "из них нашёл ИИ"],
+]) {
+  const stat = el("div", "stat");
+  stat.append(el("b", "", String(value ?? 0)), el("span", "", label));
+  document.getElementById("stats").append(stat);
+}
+const aiStat = el("div", "stat model");
+aiStat.append(el("b", "", ai.model || "—"), el("span", "", "ИИ " + (AI_STATUS[ai.status] || ai.status || "—")));
+document.getElementById("stats").append(aiStat);
+
+const topicTitles = new Map(), typeTitles = new Map();
+for (const vacancy of report.vacancies) for (const finding of vacancy.findings) {
+  topicTitles.set(finding.topic, finding.topic_title);
+  typeTitles.set(finding.type, finding.type_title);
+}
+chips("topics", "topic", [...topicTitles]);
+chips("types", "type", [...typeTitles]);
+chips("sources", "source", Object.entries(SOURCES));
+document.getElementById("search").addEventListener("input", (event) => { state.text = event.target.value; render(); });
+document.getElementById("only").addEventListener("change", (event) => { state.only = event.target.checked; render(); });
+render();
+</script>
+</body>
+</html>
