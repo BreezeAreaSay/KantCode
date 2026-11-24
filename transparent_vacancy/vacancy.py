@@ -145,8 +145,10 @@ class Vacancy:
             addresses = [addresses]
         if isinstance(addresses, str):
             addresses = [{"location": addresses}]
+        if not isinstance(addresses, list):
+            addresses = []  # число, флаг или пусто: адреса нет
         result: list[str] = []
-        for item in addresses or []:
+        for item in addresses:
             location = clean_text(item.get("location") if isinstance(item, dict) else item)
             if location and not is_placeholder(location):
                 result.append(location)
