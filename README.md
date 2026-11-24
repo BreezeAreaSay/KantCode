@@ -6,10 +6,42 @@
 сохраняет отчёт в JSON: какие условия работы описаны непонятно и что редактору
 вакансии уточнить у работодателя.
 
-- **Обработка начинается здесь:** `transparent_vacancy/cli.py`, запуск `python -m transparent_vacancy <команда>`.
-- **Расписание:** встроенная команда `schedule`, `docker-compose.yml` или системный cron.
-- **Пример отчёта:** `examples/sample_report.json` по учебному примеру организаторов
-  `examples/kantkod_sample_vacancies.json`, тот же отчёт страницей — `examples/sample_report.html`.
+## Для жюри за минуту
+
+**Проверить свой файл** (положите его в каталог `input/` рядом с `docker-compose.yml`):
+
+```bash
+cp .env.example .env                 # впишите бесплатный ключ OpenRouter в TV_AI_API_KEY
+docker compose run --rm app check /input/ваш_файл.json --out /data/report.json
+# отчёт: reports/report.json
+```
+
+Без Docker, только Python 3.11+ и без сторонних пакетов:
+
+```bash
+TV_AI_API_KEY='<ключ>' python -m transparent_vacancy check ваш_файл.json --out report.json
+python -m unittest discover -s tests -t .    # 249 тестов, без сети
+```
+
+Без ключа и без модели команда всё равно сохранит отчёт: в нём будут замечания
+правил, а в `meta.ai.status` — `unavailable`. Ключ OpenRouter бесплатный,
+покупка не нужна; вместо ключа можно взять локальную модель (раздел [«Запуск в Docker»](#запуск-в-docker)).
+
+| Что | Где |
+| --- | --- |
+| Обработка начинается | `transparent_vacancy/cli.py`, запуск `python -m transparent_vacancy <команда>` |
+| Рабочий режим и расписание | `run` — вручную, `schedule` или `docker compose up -d` — по расписанию; один и тот же процесс |
+| Шаг ИИ | `transparent_vacancy/ai_review.py`: после правил модель ищет расплывчатые формулировки и противоречия в тексте, код проверяет её ответ |
+| Модель | `nvidia/nemotron-3-ultra-550b-a55b:free` через OpenRouter, запасные — `nvidia/nemotron-3.5-lightning:free` и локальная `qwen2.5:7b` через Ollama |
+| Правила | `transparent_vacancy/rules.py`: семь тем задания, работают и без модели |
+| Пример отчёта | `examples/sample_report.json` по учебному примеру организаторов `examples/kantkod_sample_vacancies.json`; страницей — `examples/sample_report.html` |
+| Формат отчёта | раздел [«Формат отчёта»](#формат-отчёта) |
+| Дополнительный сценарий | письма работодателю по отчёту: `letters`, пример — `examples/letters/` |
+
+**Что внутри отчёта.** На каждую входную вакансию один объект: `id`, `url`,
+массив `findings` (пустой, если замечаний нет). В замечании тема, поле,
+цитата (для пропуска пустая), суть проблемы, рекомендация, кто нашёл (правило
+или ИИ); у противоречия оба исходных значения в `conflict`.
 
 ## Зависимости
 
