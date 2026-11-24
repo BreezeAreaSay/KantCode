@@ -14,6 +14,7 @@ from pathlib import Path
 from . import __version__
 from .analyzer import analyze_vacancies, build_report
 from .config import ConfigError, Settings
+from .html_report import render_html
 from .letters import build_letters
 from .scheduler import Cron, ScheduleError, run_forever
 from .source import SourceError, fetch_vacancies
@@ -187,6 +188,18 @@ def write_letters(report_path: Path, out_dir: Path, only_id: str | None) -> int:
     return EXIT_OK
 
 
+def write_html(report_path: Path, out: Path) -> int:
+    """Отчёт одной HTML-страницей с фильтрами: открывается в браузере без сервера."""
+    report = read_json(report_path)
+    if not isinstance(report, dict) or not isinstance(report.get("vacancies"), list):
+        log(f"ОШИБКА: {report_path} не является отчётом. Сначала выполните run или check.")
+        return EXIT_USAGE
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_html(report), encoding="utf-8")
+    log(f"страница отчёта: {out}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="transparent_vacancy",
@@ -222,6 +235,10 @@ def build_parser() -> argparse.ArgumentParser:
     letters.add_argument("--report", help="отчёт (по умолчанию <каталог отчёта>/report.json)")
     letters.add_argument("--out-dir", help="куда сохранить письма (по умолчанию <каталог отчёта>/letters)")
     letters.add_argument("--id", help="только вакансия с этим ID")
+
+    html = commands.add_parser("html", help="отчёт одной HTML-страницей с фильтрами")
+    html.add_argument("--report", help="отчёт (по умолчанию <каталог отчёта>/report.json)")
+    html.add_argument("--out", help="куда сохранить страницу (по умолчанию рядом с отчётом, .html)")
     return parser
 
 
@@ -233,6 +250,9 @@ def main(argv: list[str] | None = None) -> int:
             report_path = Path(args.report) if args.report else settings.output_dir / REPORT_NAME
             out_dir = Path(args.out_dir) if args.out_dir else settings.output_dir / "letters"
             return write_letters(report_path, out_dir, args.id)
+        if args.command == "html":
+            report_path = Path(args.report) if args.report else settings.output_dir / REPORT_NAME
+            return write_html(report_path, Path(args.out) if args.out else report_path.with_suffix(".html"))
         if args.no_ai:
             settings.ai_enabled = False
         if args.ai_limit is not None:
