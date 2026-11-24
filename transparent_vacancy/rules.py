@@ -559,6 +559,8 @@ def check_schedule(vacancy: Vacancy, facts: Facts) -> list[Finding]:
         vague = _search(vacancy, _VAGUE_SCHEDULE)
         if vague:
             findings.append(_vague_schedule(*vague))
+        elif schedule:
+            facts.schedule_concrete = True  # в поле названо определённое расписание, например полный рабочий день
     return findings
 
 
