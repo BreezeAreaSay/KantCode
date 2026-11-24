@@ -11,9 +11,9 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from .findings import AMBIGUITY, CONTRADICTION, GAP, Finding
+from .findings import AMBIGUITY, CONTRADICTION, GAP, NOTE, Finding
 from .textutil import excerpt, fold
 from .vacancy import Vacancy
 
@@ -28,6 +28,8 @@ class Facts:
     schedule_concrete: bool = False
     location_concrete: bool = False
     employment_concrete: bool = False
+    # Пометки: не замечания, а мелочи для редактора. В findings отчёта не попадают.
+    notes: list = field(default_factory=list)
 
 
 def _search(vacancy: Vacancy, pattern: re.Pattern, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
@@ -841,8 +843,19 @@ def check_employment(vacancy: Vacancy, facts: Facts) -> list[Finding]:
             return []
         if "рабочий день" in fold(schedule) or "рабочая неделя" in fold(schedule):
             # Поле графика уже говорит, полный это день или неполный: по занятости соискателю всё ясно.
-            # Портал часто не отдаёт поле занятости вовсе (в 4 из 10 вакансий), такой пропуск не замечание.
+            # Портал часто не отдаёт поле занятости вовсе (в 4 из 10 вакансий): это пометка, а не замечание.
             facts.employment_concrete = True
+            facts.notes.append(
+                Finding(
+                    "employment",
+                    NOTE,
+                    "employment",
+                    "",
+                    f"Поле типа занятости не заполнено. По графику «{schedule}» понятно, полный это день или "
+                    "неполный, но не сказано, постоянная это работа или временная.",
+                    "При случае попросите работодателя заполнить поле типа занятости.",
+                )
+            )
             return []
         return [
             Finding(

@@ -88,7 +88,9 @@ def _cache_key(vacancy: Vacancy, ai_signature: str) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
-def _entry(vacancy: Vacancy, findings: list[Finding], ai_reviewed: bool, ai_model: str | None = None) -> dict:
+def _entry(
+    vacancy: Vacancy, notes: list[Finding], findings: list[Finding], ai_reviewed: bool, ai_model: str | None = None
+) -> dict:
     return {
         "id": vacancy.id,
         "url": vacancy.url,
@@ -97,6 +99,7 @@ def _entry(vacancy: Vacancy, findings: list[Finding], ai_reviewed: bool, ai_mode
         "ai_reviewed": ai_reviewed,
         "ai_model": ai_model if ai_reviewed else None,
         "findings": [item.to_json() for item in findings],
+        "notes": [item.to_json() for item in notes],
     }
 
 
@@ -149,7 +152,7 @@ def analyze_vacancies(
         rule_findings, facts = rules.analyze(vacancy)
         key = _cache_key(vacancy, signature)
         if not settings.ai_enabled:
-            return _entry(vacancy, rule_findings, False)
+            return _entry(vacancy, facts.notes, rule_findings, False)
         cached = cache.get(key)
         if cached is not None:
             model = cached.get("model") or settings.ai_model
@@ -158,7 +161,7 @@ def analyze_vacancies(
                 ai.findings += len(cached.get("ai_findings", []))
                 ai.models_used[model] = ai.models_used.get(model, 0) + 1
             extra = [Finding.from_json(item) for item in cached.get("ai_findings", [])]
-            return _entry(vacancy, rule_findings + extra, True, model)
+            return _entry(vacancy, facts.notes, rule_findings + extra, True, model)
         if order[id(vacancy)] < budget:
             check_models()
         with lock:
@@ -166,7 +169,7 @@ def analyze_vacancies(
             if not allowed:
                 ai.skipped += 1
         if not allowed:
-            return _entry(vacancy, rule_findings, False)
+            return _entry(vacancy, facts.notes, rule_findings, False)
         try:
             extra, model = ai_review.review(client, vacancy, rule_findings, facts, settings.ai_strict)
         except AIError as error:
@@ -177,7 +180,7 @@ def analyze_vacancies(
                 if ai._streak >= FAILURES_TO_STOP and not ai._stopped:
                     ai._stopped = True
                     log(f"ИИ: {FAILURES_TO_STOP} сбоя подряд, остальные вакансии разбираются только правилами")
-            return _entry(vacancy, rule_findings, False)
+            return _entry(vacancy, facts.notes, rule_findings, False)
         with lock:
             ai._streak = 0
             ai.reviewed += 1
@@ -187,7 +190,7 @@ def analyze_vacancies(
             done = ai.reviewed
         if done % 10 == 0:
             log(f"ИИ: разобрано вакансий: {done}")
-        return _entry(vacancy, rule_findings + extra, True, model)
+        return _entry(vacancy, facts.notes, rule_findings + extra, True, model)
 
     if settings.ai_enabled and settings.ai_workers > 1 and len(vacancies) > 1:
         with ThreadPoolExecutor(max_workers=settings.ai_workers) as pool:
@@ -222,6 +225,7 @@ def build_report(
         "vacancies": len(entries),
         "vacancies_with_findings": sum(1 for entry in entries if entry["findings"]),
         "findings_total": sum(by_type.values()),
+        "notes_total": sum(len(entry.get("notes") or []) for entry in entries),
         "findings_by_topic": dict(sorted(by_topic.items())),
         "findings_by_type": dict(sorted(by_type.items())),
         "ai": ai.to_json(),
