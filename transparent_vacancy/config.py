@@ -62,6 +62,7 @@ class Settings:
     ai_model: str = "qwen2.5:7b"
     ai_api_key: str = ""
     ai_timeout: int = 180
+    ai_retries: int = 3  # попыток на один запрос к модели: бесплатные серверы часто просят подождать
     ai_workers: int = 2
     ai_max_vacancies: int = 0  # 0 — без ограничения
     ai_strict: bool = True  # неоднозначность от модели только с признаком расплывчатости в цитате
@@ -88,6 +89,7 @@ class Settings:
             ai_model=text("TV_AI_MODEL", base.ai_model),
             ai_api_key=text("TV_AI_API_KEY", ""),
             ai_timeout=_integer("TV_AI_TIMEOUT", text("TV_AI_TIMEOUT", str(base.ai_timeout)), 1),
+            ai_retries=_integer("TV_AI_RETRIES", text("TV_AI_RETRIES", str(base.ai_retries)), 1),
             ai_workers=_integer("TV_AI_WORKERS", text("TV_AI_WORKERS", str(base.ai_workers)), 1),
             ai_max_vacancies=_integer("TV_AI_MAX_VACANCIES", text("TV_AI_MAX_VACANCIES", "0"), 0),
             ai_strict=_flag(text("TV_AI_STRICT", "true")),

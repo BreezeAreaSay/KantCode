@@ -1,6 +1,8 @@
 import json
+import os
 import unittest
 from http.server import BaseHTTPRequestHandler
+from unittest import mock
 
 from tests.helpers import _Server
 from transparent_vacancy import llm
@@ -24,9 +26,11 @@ class ScriptedModel(_Server):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode("utf-8"))
                 model.requests.append({"path": self.path, "body": body, "authorization": self.headers.get("Authorization")})
-                code, payload = model.script.pop(0) if len(model.script) > 1 else model.script[0]
+                code, payload, *extra = model.script.pop(0) if len(model.script) > 1 else model.script[0]
                 data = payload if isinstance(payload, bytes) else json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 self.send_response(code)
+                for name, value in (extra[0] if extra else {}).items():
+                    self.send_header(name, value)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -116,6 +120,58 @@ class ChatClientTest(unittest.TestCase):
         self.assertIn("нет связи с моделью", str(caught.exception))
 
 
+class RetryTest(unittest.TestCase):
+    BUSY = (429, {"error": {"message": "temporarily rate-limited upstream"}})
+
+    def serve(self, *script, retries: int = 3) -> tuple[ScriptedModel, ChatClient]:
+        model = ScriptedModel(*script)
+        self.addCleanup(model.close)
+        return model, ChatClient(model.url + "/v1", "stub", timeout=5, retries=retries, pause=0)
+
+    def test_busy_server_is_asked_again(self):
+        model, client = self.serve(self.BUSY, (503, {}), (200, chat(json.dumps(ANSWER))))
+        self.assertEqual(client.complete_json("s", "u"), ANSWER)
+        self.assertEqual(len(model.requests), 3)
+
+    def test_rate_limit_does_not_switch_json_mode_off(self):
+        model, client = self.serve(self.BUSY, (200, chat(json.dumps(ANSWER))))
+        client.complete_json("s", "u")
+        client.complete_json("s", "u")
+        self.assertTrue(all("response_format" in request["body"] for request in model.requests))
+
+    def test_gives_up_after_the_last_attempt(self):
+        model, client = self.serve(self.BUSY, retries=2)
+        with self.assertRaises(AIError) as caught:
+            client.complete_json("s", "u")
+        self.assertEqual(caught.exception.code, 429)
+        self.assertIn("HTTP 429", str(caught.exception))
+        self.assertEqual(len(model.requests), 2)
+
+    def test_refused_request_is_not_repeated(self):
+        model, client = self.serve((401, {"error": {"message": "No auth credentials found"}}))
+        with self.assertRaises(AIError) as caught:
+            client.complete_json("s", "u")
+        self.assertEqual(caught.exception.code, 401)
+        self.assertEqual(len(model.requests), 1)
+
+    def test_pause_grows_and_follows_the_server_hint(self):
+        model = ScriptedModel(self.BUSY, (429, {}, {"Retry-After": "7"}), (429, {}, {"Retry-After": "600"}), (200, chat("{}")))
+        self.addCleanup(model.close)
+        client = ChatClient(model.url + "/v1", "stub", timeout=5, retries=4, pause=2)
+        with mock.patch.object(llm.time, "sleep") as sleep:
+            client.complete_json("s", "u")
+        # без подсказки пауза растёт с номером попытки; подсказка сервера важнее, но не дольше полуминуты
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 7.0, llm.MAX_PAUSE])
+
+    def test_lost_connection_is_retried_too(self):
+        model, client = self.serve((200, chat("{}")), retries=2)
+        model.close()
+        with self.assertRaises(AIError) as caught:
+            client.complete_json("s", "u")
+        self.assertIsNone(caught.exception.code)
+        self.assertIn("нет связи с моделью", str(caught.exception))
+
+
 class OpenerTest(unittest.TestCase):
     def proxies(self, url: str) -> dict | None:
         for handler in llm._opener(url).handlers:
@@ -124,9 +180,6 @@ class OpenerTest(unittest.TestCase):
         return None
 
     def test_local_model_is_reached_without_a_proxy(self):
-        import os
-        from unittest import mock
-
         with mock.patch.dict(os.environ, {"http_proxy": "http://proxy.example:3128", "https_proxy": "http://proxy.example:3128"}):
             for url in ("http://localhost:11434/v1/chat/completions", "http://127.0.0.1:8080/v1", "http://ollama:11434/v1"):
                 with self.subTest(url=url):
