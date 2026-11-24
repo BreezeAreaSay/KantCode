@@ -240,6 +240,7 @@ class FallbackModelsTest(CliCase):
         code, output = self.call("run")
         self.assertEqual(code, 0)
         self.assertIn("ни одна модель не ответила", output)
+        self.assertIn("Подсказка: впишите ключ в TV_AI_API_KEY", output)
         ai = self.report()["meta"]["ai"]
         self.assertEqual((ai["status"], ai["vacancies_skipped"], ai["models_used"]), ("unavailable", 6, {}))
         self.assertEqual(self.model.calls, 0)  # хватило проверки: по вакансиям запросы не уходили
@@ -272,6 +273,7 @@ class FallbackModelsTest(CliCase):
         code, output = self.call("models")
         self.assertEqual(code, cli.EXIT_AI)
         self.assertIn("ни одна модель не отвечает", output)
+        self.assertIn("--profile local", output)
 
 
 class ScheduleCommandTest(CliCase):
