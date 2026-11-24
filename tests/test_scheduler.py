@@ -21,6 +21,11 @@ class CronTest(unittest.TestCase):
         self.assertEqual(Cron("0 0 * * 0").next_after(datetime(2026, 11, 24)), sunday)
         self.assertEqual(Cron("0 0 * * 7").next_after(datetime(2026, 11, 24)), sunday)
 
+    def test_day_of_month_and_weekday_together_mean_either(self):
+        cron = Cron("0 6 13 * 5")  # 13-е число или пятница, как в обычном cron
+        self.assertEqual(cron.next_after(datetime(2026, 11, 24, 12, 0)), datetime(2026, 11, 27, 6, 0))  # пятница
+        self.assertEqual(cron.next_after(datetime(2026, 12, 11, 6, 0)), datetime(2026, 12, 13, 6, 0))  # воскресенье, 13-е
+
     def test_bad_expressions(self):
         for expression in ("", "0 6 * *", "61 * * * *", "a * * * *", "*/0 * * * *", "5-1 * * * *"):
             with self.subTest(expression=expression):

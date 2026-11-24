@@ -2,12 +2,15 @@ import contextlib
 import io
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.helpers import FakeModel, FakePortal, api_response, vacancy
-from transparent_vacancy import cli
+from transparent_vacancy import __version__, cli
 
 VAGUE_DUTY = "Проведение инъекций и забор крови. Возможны командировки."
 
@@ -165,6 +168,89 @@ class RunTest(CliCase):
         self.assertEqual(self.model.calls, 0)
 
 
+    def test_command_line_keys_override_settings(self):
+        other = self.dir / "other"
+        code, output = self.call(
+            "run", "--source-url", self.portal.url + "/api/v1/vacancies/region/39?text=x", "--max", "4",
+            "--out-dir", str(other), "--ai-limit", "1",
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("вакансий не больше 4", output)
+        report = json.loads((other / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["meta"]["vacancies"], 4)
+        self.assertIn("text=x", report["meta"]["source"])
+        ai = report["meta"]["ai"]
+        self.assertEqual((ai["status"], ai["vacancies_reviewed"], ai["vacancies_skipped"]), ("partial", 1, 3))
+        self.assertEqual([item["ai_reviewed"] for item in report["vacancies"]], [True, False, False, False])
+        self.assertFalse((self.dir / "reports" / "report.json").exists())
+
+    def test_several_workers_keep_the_order_and_report_progress(self):
+        self.portal.vacancies[:] = [vacancy(id=f"id-{number}", duty=VAGUE_DUTY) for number in range(10)]
+        os.environ.update(TV_AI_WORKERS="3", TV_MAX_VACANCIES="10", TV_PAGE_SIZE="5")
+        code, output = self.call("run")
+        self.assertEqual(code, 0)
+        self.assertIn("ИИ: разобрано вакансий: 10", output)
+        report = self.report()
+        self.assertEqual([item["id"] for item in report["vacancies"]], [f"id-{number}" for number in range(10)])
+        self.assertEqual((report["meta"]["ai"]["status"], report["meta"]["ai"]["findings"]), ("ok", 10))
+
+
+class ScheduleCommandTest(CliCase):
+    def test_schedule_runs_the_same_job_as_the_manual_run(self):
+        with mock.patch.object(cli, "run_forever") as loop:
+            code, output = self.call("schedule", "--cron", "*/5 * * * *", "--run-on-start", "--no-ai")
+        self.assertEqual(code, 0)
+        self.assertIn("расписание: */5 * * * *", output)
+        self.assertEqual(self.status()["status"], "ok")  # запуск сразу, до ожидания срока
+        first = self.status()["finished_at"]
+        cron, job, _ = loop.call_args.args
+        self.assertEqual(cron.expression, "*/5 * * * *")
+        self.portal.vacancies[0]["employment"] = None
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(job(), 0)  # то, что планировщик вызывает по сроку
+        self.assertEqual(self.report()["vacancies"][0]["findings"][0]["topic"], "employment")
+        self.assertGreaterEqual(self.status()["finished_at"], first)
+
+    def test_schedule_is_taken_from_settings_and_waits_for_the_due_time(self):
+        os.environ["TV_SCHEDULE"] = "15 3 * * *"
+        with mock.patch.object(cli, "run_forever") as loop:
+            code, _ = self.call("schedule")
+        self.assertEqual(code, 0)
+        self.assertEqual(loop.call_args.args[0].expression, "15 3 * * *")
+        self.assertEqual(self.portal.requests, [])  # без --run-on-start до срока к порталу не ходим
+
+    def test_bad_schedule(self):
+        code, output = self.call("schedule", "--cron", "61 * * * *")
+        self.assertEqual(code, cli.EXIT_USAGE)
+        self.assertIn("ОШИБКА настройки", output)
+
+    def test_interrupt_stops_quietly(self):
+        with mock.patch.object(cli, "run_forever", side_effect=KeyboardInterrupt):
+            code, output = self.call("schedule")
+        self.assertEqual(code, 130)
+        self.assertIn("остановлено", output)
+
+
+class EntryPointTest(unittest.TestCase):
+    def run_module(self, *argv: str) -> subprocess.CompletedProcess:
+        root = Path(__file__).resolve().parent.parent
+        return subprocess.run(
+            [sys.executable, "-m", "transparent_vacancy", *argv], cwd=root, capture_output=True, text=True, timeout=60
+        )
+
+    def test_module_is_runnable(self):
+        done = self.run_module("--version")
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, __version__))
+
+    def test_command_is_required(self):
+        done = self.run_module()
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("usage", done.stderr)
+
+    def test_exit_code_of_the_command_becomes_the_exit_code_of_the_process(self):
+        done = self.run_module("--env-file", "absent.env", "check", "absent.json", "--no-ai")
+        self.assertEqual(done.returncode, cli.EXIT_USAGE)
+
 class CheckTest(CliCase):
     def write(self, name: str, payload) -> str:
         path = self.dir / name
@@ -195,6 +281,40 @@ class CheckTest(CliCase):
         source = self.write("many.json", [vacancy(id=f"v{number}") for number in range(5)])
         self.call("check", source)
         self.assertEqual(self.report("check-report.json")["meta"]["vacancies"], 5)
+
+    def test_several_files_make_one_report(self):
+        first = self.write("page1.json", api_response([vacancy(id="a"), vacancy(id="b")]))
+        second = self.write("page2.json", api_response([vacancy(id="b"), vacancy(id="c")]))
+        code, output = self.call("check", first, second, "--no-ai", "--no-cache")
+        self.assertEqual(code, 0)
+        self.assertIn("page2.json: вакансий 2", output)
+        meta = self.report("check-report.json")["meta"]
+        self.assertEqual((meta["vacancies_received"], meta["duplicates_merged"], meta["vacancies"]), (4, 1, 3))
+        self.assertEqual(meta["source"], f"{first}, {second}")
+        self.assertFalse((self.dir / "reports" / "cache.json").exists())
+
+    def test_require_ai_in_check_mode_saves_the_report_and_fails(self):
+        self.model.fail = True
+        source = self.write("sample.json", api_response([vacancy(id="a", employment=None)]))
+        out = self.dir / "out.json"
+        code, output = self.call("check", source, "--out", str(out), "--require-ai")
+        self.assertEqual(code, cli.EXIT_AI)
+        self.assertIn("требовался ИИ", output)
+        report = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(report["meta"]["ai"]["status"], "unavailable")
+        self.assertEqual([item["topic"] for item in report["vacancies"][0]["findings"]], ["employment"])
+
+    def test_cache_makes_the_second_check_free(self):
+        source = self.write("sample.json", api_response([vacancy(id="a", duty=VAGUE_DUTY)]))
+        self.call("check", source)
+        calls = self.model.calls
+        code, _ = self.call("check", source, "--require-ai")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.model.calls, calls)
+        ai = self.report("check-report.json")["meta"]["ai"]
+        self.assertEqual((ai["status"], ai["vacancies_from_cache"], ai["findings"]), ("ok", 1, 1))
+        self.call("check", source, "--no-cache")
+        self.assertEqual(self.model.calls, calls + 1)
 
     def test_bad_file(self):
         code, output = self.call("check", str(self.dir / "missing.json"))

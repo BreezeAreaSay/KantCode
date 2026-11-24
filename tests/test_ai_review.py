@@ -108,6 +108,67 @@ class ValidateTest(unittest.TestCase):
                 (found,) = validate([item(quote=phrase)], duty=text)
                 self.assertEqual(found.quote, phrase)
 
+    def test_problem_or_advice_quoting_words_absent_from_the_vacancy(self):
+        invented = "Фраза «удобный график» не конкретизирована и непонятна."
+        self.assertEqual(validate([item(problem=invented)], duty=DUTY), [])
+        (found,) = validate([item(recommendation="Уточните, что значит «удобный график».")], duty=DUTY)
+        self.assertEqual(found.recommendation, ai_review._FALLBACK_RECOMMENDATION["duties"])
+        (found,) = validate([item(problem="Фраза «возможны командировки» не говорит, как часто придётся ездить.")], duty=DUTY)
+        self.assertEqual(found.quote, "Возможны командировки")
+
+    def test_long_quote_is_cut_at_a_word(self):
+        text = "Возможны командировки " + "по районам области и соседним регионам " * 8
+        (found,) = validate([item(quote=text)], duty=text)
+        self.assertLessEqual(len(found.quote), ai_review.MAX_QUOTE_CHARS)
+        self.assertTrue(found.quote.startswith("Возможны командировки по районам"))
+        self.assertIn(found.quote, text)
+        self.assertFalse(found.quote.endswith(" "))
+
+    def test_address_named_loosely_is_looked_up_in_the_address_field(self):
+        text = "Проведение инъекций. Работа в г. Светлогорске."
+        (found,) = validate(
+            [
+                item(
+                    topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+                    second_field="address", second_quote="г Калининград",
+                    problem="В описании назван один город, а в адресе места работы другой.",
+                )
+            ],
+            duty=text,
+        )
+        self.assertEqual(found.conflict[1], {"field": "addresses.address[0].location", "value": "г Калининград"})
+
+    def test_rule_findings_of_another_topic_or_kind_do_not_hide_ai_findings(self):
+        # правило: адрес без дома (место работы, неоднозначность) и нет типа занятости (пропуск)
+        changes = dict(
+            duty="Проведение инъекций. Возможны командировки. Работа в г. Светлогорске.",
+            addresses={"address": [{"location": "Калининградская область, г Калининград"}]},
+            employment=None,
+        )
+        clash = item(
+            topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+            second_field="addresses.address[0].location", second_quote="г Калининград",
+            problem="В описании назван один город, а в адресе места работы другой.",
+        )
+        found = validate([item(), clash, item(topic="employment", quote="Возможны командировки")], **changes)
+        self.assertEqual([(entry.topic, entry.kind) for entry in found], [("duties", "ambiguity"), ("location", "contradiction")])
+
+    def test_no_more_than_six_findings_per_vacancy(self):
+        phrases = [
+            "Возможны командировки", "Иногда работа в выходные", "Возможно обучение", "Иногда дежурства",
+            "Возможна подмена коллег", "Иногда выезды на дом", "Возможны переработки",
+        ]
+        topics = ["duties", "duties", "requirements", "requirements", "title", "title", "employment"]
+        text = "Проведение инъекций. " + ". ".join(phrases) + "."
+        found = validate([item(topic=topic, quote=phrase) for topic, phrase in zip(topics, phrases)], duty=text)
+        self.assertEqual(len(found), ai_review.MAX_FINDINGS)
+        self.assertEqual([entry.quote for entry in found], phrases[:6])
+
+    def test_answer_of_the_wrong_shape_gives_nothing(self):
+        for answer in (None, "замечаний нет", {"topic": "duties"}, [None, 5, "строка", []]):
+            with self.subTest(answer=answer):
+                self.assertEqual(validate(answer, duty=DUTY), [])
+
     def test_topic_aliases(self):
         (found,) = validate([item(topic="duty")], duty=DUTY)
         self.assertEqual(found.topic, "duties")
