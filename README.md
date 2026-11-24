@@ -8,6 +8,18 @@
 
 ## Для жюри за минуту
 
+**Работает сразу после клонирования, без настроек и установки пакетов** (нужен только Python 3.11+):
+
+```bash
+git clone https://github.com/BreezeAreaSay/KantCode.git && cd KantCode
+python -m transparent_vacancy check examples/kantkod_sample_vacancies.json --out report.json
+python -m transparent_vacancy html --report report.json      # открыть report.html в браузере
+```
+
+Без модели отчёт строится на правилах. Чтобы подключить ИИ, достаточно одного из
+трёх способов ниже. Готовый пример отчёта с ИИ уже лежит в `examples/sample_report.json`
+и `examples/sample_report.html`.
+
 Положите свой файл в каталог `input/` рядом с `docker-compose.yml` и выберите,
 откуда сервис возьмёт модель. Отчёт появится в `reports/report.json`.
 

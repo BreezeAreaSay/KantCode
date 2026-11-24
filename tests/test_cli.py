@@ -332,10 +332,14 @@ class EntryPointTest(unittest.TestCase):
         done = self.run_module("--version")
         self.assertEqual((done.returncode, done.stdout.strip()), (0, __version__))
 
-    def test_command_is_required(self):
+    def test_bare_start_prints_ready_commands(self):
         done = self.run_module()
-        self.assertEqual(done.returncode, 2)
-        self.assertIn("usage", done.stderr)
+        self.assertEqual(done.returncode, 0)
+        self.assertIn("python -m transparent_vacancy check examples/kantkod_sample_vacancies.json", done.stdout)
+        self.assertIn("TV_AI_API_KEY", done.stdout)
+        help_ = self.run_module("--help")
+        self.assertEqual(help_.returncode, 0)
+        self.assertIn("check", help_.stdout)
 
     def test_exit_code_of_the_command_becomes_the_exit_code_of_the_process(self):
         done = self.run_module("--env-file", "absent.env", "check", "absent.json", "--no-ai")
