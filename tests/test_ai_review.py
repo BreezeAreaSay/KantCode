@@ -77,11 +77,33 @@ class ValidateTest(unittest.TestCase):
         schedule = item(topic="schedule", quote="Удобный график")
         self.assertEqual(validate([salary, schedule], duty=text, scheduleTypeComment="с 8 до 17, пн-пт"), [])
 
+    def test_side_condition_is_kept_even_when_topic_is_concrete(self):
+        trips = item(topic="schedule")  # командировки — не общие слова о графике
+        (found,) = validate([trips], duty=DUTY, scheduleTypeComment="с 8 до 17, пн-пт")
+        self.assertEqual((found.topic, found.quote), ("schedule", "Возможны командировки"))
+
     def test_ai_does_not_repeat_rules(self):
-        duplicate = item(topic="schedule", quote="Сменная работа", field="schedule")
-        self.assertEqual(validate([duplicate], schedule="Сменная работа", duty=DUTY), [])
+        text = "Ведение документации и другие поручения руководителя. Возможны командировки."
+        duplicate = item(quote="другие поручения руководителя")
+        self.assertEqual(validate([duplicate], duty=text), [])
         after_gap = item(topic="employment", quote="Возможны командировки")
         self.assertEqual(validate([after_gap], employment=None, duty=DUTY), [])
+
+    def test_ai_may_add_another_place_on_a_topic_the_rules_touched(self):
+        text = "Ведение документации и другие поручения руководителя. Возможны командировки."
+        (found,) = validate([item()], duty=text)
+        self.assertEqual(found.quote, "Возможны командировки")
+
+    def test_strict_mode_needs_a_hedge_in_the_quote(self):
+        plain = item(quote="Проведение инъекций и забор крови", problem="Не сказано, какие именно действия входят в эту работу.")
+        self.assertEqual(validate([plain], duty=DUTY), [])
+        subject = Vacancy(vacancy(duty=DUTY))
+        known, facts = rules.analyze(subject)
+        self.assertEqual(len(ai_review.validate([plain], subject, known, facts, strict=False)), 1)
+
+    def test_topic_aliases(self):
+        (found,) = validate([item(topic="duty")], duty=DUTY)
+        self.assertEqual(found.topic, "duties")
 
     def test_contradiction_needs_both_values(self):
         text = "Проведение инъекций. Работа в г. Светлогорске."

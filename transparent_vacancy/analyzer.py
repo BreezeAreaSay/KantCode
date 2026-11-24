@@ -95,7 +95,9 @@ def analyze_vacancies(
     ai = AIRun(enabled=settings.ai_enabled, base_url=settings.ai_base_url, model=settings.ai_model)
     if settings.ai_enabled and client is None:
         client = ChatClient(settings.ai_base_url, settings.ai_model, settings.ai_api_key, settings.ai_timeout)
-    signature = f"{settings.ai_model}|{ai_review.PROMPT_VERSION}" if settings.ai_enabled else "no-ai"
+    signature = (
+        f"{settings.ai_model}|{ai_review.PROMPT_VERSION}|{settings.ai_strict}" if settings.ai_enabled else "no-ai"
+    )
     lock = threading.Lock()
     budget = settings.ai_max_vacancies or len(vacancies)
     order = {id(vacancy): position for position, vacancy in enumerate(vacancies)}
@@ -119,7 +121,7 @@ def analyze_vacancies(
         if not allowed:
             return _entry(vacancy, rule_findings, False)
         try:
-            extra = ai_review.review(client, vacancy, rule_findings, facts)
+            extra = ai_review.review(client, vacancy, rule_findings, facts, settings.ai_strict)
         except AIError as error:
             with lock:
                 ai.failed += 1
