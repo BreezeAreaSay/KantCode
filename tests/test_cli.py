@@ -12,18 +12,18 @@ from unittest import mock
 from tests.helpers import FakeModel, FakePortal, api_response, vacancy
 from transparent_vacancy import __version__, cli
 
-VAGUE_DUTY = "Проведение инъекций и забор крови. Возможны командировки."
+VAGUE_DUTY = "Проведение инъекций и забор крови. Возможны подмены."
 
 
 def model_reply(fields: dict) -> list[dict]:
     """Модель-заглушка: одно настоящее замечание и одно выдуманное."""
-    if "Возможны командировки" not in fields.get("duty", ""):
+    if "Возможны подмены" not in fields.get("duty", ""):
         return []
     return [
         {
-            "topic": "duties", "type": "ambiguity", "field": "duty", "quote": "Возможны командировки",
+            "topic": "duties", "type": "ambiguity", "field": "duty", "quote": "Возможны подмены",
             "problem": "Из формулировки нельзя понять, как часто и куда придётся ездить.",
-            "recommendation": "Уточните у работодателя, как часто бывают командировки.",
+            "recommendation": "Уточните у работодателя, как часто бывают подмены.",
         },
         {
             "topic": "schedule", "type": "ambiguity", "field": "duty", "quote": "удобный график",
@@ -86,7 +86,7 @@ class RunTest(CliCase):
         self.assertTrue(with_trips["ai_reviewed"])
         self.assertEqual(
             [(item["topic"], item["detected_by"], item["quote"]) for item in with_trips["findings"]],
-            [("duties", "ai", "Возможны командировки")],
+            [("duties", "ai", "Возможны подмены")],
         )
         self.assertEqual(report["vacancies"][0]["findings"], [])  # замечаний нет — пустой массив
         self.assertEqual(self.status()["status"], "ok")

@@ -42,6 +42,23 @@ class TitleTest(unittest.TestCase):
     def test_generic_title_is_ambiguous(self):
         self.assertEqual(kinds(job__name="Специалист"), [("title", "ambiguity")])
 
+    def test_entry_level_title_against_years_of_experience(self):
+        (item,) = findings(
+            job__name="Младший аналитик данных",
+            requirement={"education": "Высшее", "experience": 5},
+            requirements="Знание SQL.",
+            duty="Подготовка SQL-отчётов, очистка таблиц, контроль показателей.",
+        )
+        self.assertEqual((item.topic, item.kind, item.quote), ("title", "contradiction", "Младший аналитик данных"))
+        self.assertEqual(item.conflict[1], {"field": "requirement.experience", "value": "5"})
+        from_text = findings(job__name="Стажёр отдела кадров", requirements="Опыт работы в кадровой службе не менее 4 лет.")
+        self.assertEqual([(entry.topic, entry.kind) for entry in from_text], [("title", "contradiction"), ("requirements", "contradiction")])
+        self.assertIn("не менее 4 лет", from_text[0].conflict[1]["value"])
+
+    def test_entry_level_title_with_little_experience_is_fine(self):
+        self.assertEqual(kinds(job__name="Младший воспитатель"), [])
+        self.assertEqual(kinds(job__name="Младшая медицинская сестра", requirements="Желателен опыт работы от 3 лет"), [])
+
     def test_specific_title_is_fine(self):
         self.assertEqual(kinds(job__name="Специалист по охране труда"), [])
 
@@ -307,10 +324,87 @@ class LocationTest(unittest.TestCase):
         self.assertIn("присутствие в офисе", item.conflict[1]["value"])
 
     def test_partly_remote_work_does_not_contradict_the_office(self):
-        self.assertEqual(
-            kinds(duty="Сопровождение информационных систем. Частично возможна удалённая работа.", qualification="Работа в офисе."),
-            [],
+        (item,) = findings(
+            duty="Сопровождение информационных систем. Частично возможна удалённая работа.", qualification="Работа в офисе."
         )
+        self.assertEqual((item.topic, item.kind), ("location", "ambiguity"))  # неясно сколько, но противоречия нет
+
+    def test_city_in_the_text_against_the_address(self):
+        (item,) = findings(duty="Ведение кадрового делопроизводства. Работа в офисе в г. Светлогорске.")
+        self.assertEqual((item.topic, item.kind, item.field), ("location", "contradiction", "duty"))
+        self.assertEqual(item.conflict[0], {"field": "duty", "value": "Работа в офисе в г. Светлогорске"})
+        self.assertEqual(item.conflict[1]["field"], "addresses.address[0].location")
+        self.assertIn("г Калининград", item.conflict[1]["value"])
+
+    def test_city_that_agrees_with_the_address_or_is_not_the_workplace(self):
+        for duty in (
+            "Ведение кадрового делопроизводства. Работа в офисе в г. Калининграде.",
+            "Проведение инъекций и забор крови. Имеется служебный автобус с г. Гвардейск.",
+            "Проведение инъекций и забор крови. Доставка анализов в г. Светлогорск.",
+        ):
+            with self.subTest(duty=duty):
+                self.assertEqual(kinds(duty=duty), [])
+        self.assertEqual(
+            kinds(duty="Проведение консультаций. Удалённая работа, офис в г. Светлогорске.", addresses=None), []
+        )
+
+
+class WordingRulesTest(unittest.TestCase):
+    """Оговорки в тексте, которые правила находят без модели."""
+
+    def test_possible_trips_overtime_and_remote_work(self):
+        cases = (
+            ("Перевозка сотрудников по городу. Возможны командировки.", "duties", "Возможны командировки"),
+            ("Работа с кассой, запись на занятия. Периодически дежурства.", "schedule", "Периодически дежурства"),
+            ("Приготовление горячих блюд. Работа в дневное время, иногда в выходные.", "schedule", "иногда в выходные"),
+            ("Администрирование сети учреждения. Частично возможна удалённая работа.", "location", "возможна удалённая работа"),
+        )
+        for duty, topic, quote in cases:
+            with self.subTest(duty=duty):
+                (item,) = findings(duty=duty)
+                self.assertEqual((item.topic, item.kind, item.field, item.quote), (topic, "ambiguity", "duty", quote))
+                self.assertIn("как часто", item.problem)
+
+    def test_condition_put_off_until_the_interview_goes_to_its_topic(self):
+        cases = (
+            ("Формат и адрес рабочего места уточняются при собеседовании.", "location"),
+            ("Требования к знаниям уточняются на собеседовании.", "requirements"),
+            ("Формат работы обсуждается.", "location"),
+        )
+        for text, topic in cases:
+            with self.subTest(text=text):
+                (item,) = findings(qualification=text)
+                self.assertEqual((item.topic, item.kind, item.field), (topic, "ambiguity", "qualification"))
+                self.assertEqual(item.quote, text.rstrip("."))
+                self.assertIn("отложено до собеседования", item.problem)
+
+    def test_phrase_about_everything_goes_to_the_topic_of_its_field_once(self):
+        (item,) = findings(qualification="Условия обсуждаются на собеседовании.")
+        self.assertEqual((item.topic, item.field), ("requirements", "qualification"))
+        # если по требованиям замечание уже есть, общая фраза второго не добавляет
+        both = kinds(
+            requirement={"education": "Не указано", "experience": 0},
+            requirements="Ответственность.",
+            qualification="Условия обсуждаются на собеседовании.",
+        )
+        self.assertEqual(both, [("requirements", "gap")])
+
+    def test_put_off_schedule_or_pay_is_fine_when_the_fields_are_concrete(self):
+        self.assertEqual(kinds(duty="Проведение инъекций и забор крови. График уточняется на собеседовании: 5/2, с 9 до 18."), [])
+        self.assertEqual(kinds(duty="Проведение инъекций и забор крови. Оплата обсуждается на собеседовании."), [])
+
+    def test_one_finding_for_one_phrase(self):
+        (item,) = findings(duty="Сопровождение систем. Формат работы обсуждается, частично возможна удалённая работа.")
+        self.assertEqual((item.topic, item.quote), ("location", "Формат работы обсуждается, частично возможна удалённая работа"))
+
+    def test_plain_statements_are_not_touched(self):
+        for duty in (
+            "Проведение занятий по лечебной физкультуре для детей в группах и индивидуально.",
+            "Выдача книг. График работы 5/2, возможен неполный рабочий день.",
+            "Командировки по области два раза в месяц на один день.",
+        ):
+            with self.subTest(duty=duty):
+                self.assertEqual(kinds(duty=duty), [])
 
 
 class EmploymentTest(unittest.TestCase):

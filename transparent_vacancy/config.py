@@ -97,7 +97,12 @@ class Settings:
             default_url = text("TV_AI_LOCAL_URL", base.ai_base_url)
             default_model = text("TV_AI_LOCAL_MODEL", base.ai_model)
             default_timeout = base.ai_timeout
-        default_fallbacks = ",".join(OPENROUTER_FALLBACKS) if by_token and not given("TV_AI_MODEL") else ""
+        if by_token and not given("TV_AI_MODEL"):
+            # Цепочка на случай лимитов: бесплатная модель, запасная, затем локальная, если она запущена.
+            local = f"{text('TV_AI_LOCAL_MODEL', base.ai_model)}@{text('TV_AI_LOCAL_URL', base.ai_base_url).rstrip('/')}"
+            default_fallbacks = ",".join(OPENROUTER_FALLBACKS + (local,))
+        else:
+            default_fallbacks = ""
         settings = cls(
             source_url=text("TV_SOURCE_URL", base.source_url),
             max_vacancies=_integer("TV_MAX_VACANCIES", text("TV_MAX_VACANCIES", str(base.max_vacancies)), 1),

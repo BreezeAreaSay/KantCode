@@ -14,7 +14,7 @@ def item(**changes) -> dict:
         "topic": "duties",
         "type": "ambiguity",
         "field": "duty",
-        "quote": "возможны командировки",
+        "quote": "возможны подмены",
         "second_field": "",
         "second_quote": "",
         "problem": PROBLEM,
@@ -30,14 +30,14 @@ def validate(items, **changes):
     return ai_review.validate(items, subject, known, facts)
 
 
-DUTY = "Проведение инъекций и забор крови. Возможны командировки. Работа в дружном коллективе."
+DUTY = "Проведение инъекций и забор крови. Возможны подмены. Работа в дружном коллективе."
 
 
 class ValidateTest(unittest.TestCase):
     def test_finding_with_real_quote_is_accepted_with_source_text(self):
         (found,) = validate([item()], duty=DUTY)
         self.assertEqual((found.topic, found.kind, found.field, found.detected_by), ("duties", "ambiguity", "duty", "ai"))
-        self.assertEqual(found.quote, "Возможны командировки")  # как в источнике, а не как написала модель
+        self.assertEqual(found.quote, "Возможны подмены")  # как в источнике, а не как написала модель
         self.assertEqual(found.recommendation, ADVICE)
 
     def test_invented_quote_is_dropped(self):
@@ -57,7 +57,7 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(validate([bad], duty=DUTY), [])
 
     def test_recommendation_with_invented_number_or_law_is_replaced(self):
-        for advice in ("Уточните, верно ли, что командировки длятся 14 дней.", "Сошлитесь на ТК РФ и уточните условия."):
+        for advice in ("Уточните, верно ли, что подмены длятся 14 дней.", "Сошлитесь на ТК РФ и уточните условия."):
             with self.subTest(advice=advice):
                 (found,) = validate([item(recommendation=advice)], duty=DUTY)
                 self.assertEqual(found.recommendation, ai_review._FALLBACK_RECOMMENDATION["duties"])
@@ -78,21 +78,21 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(validate([salary, schedule], duty=text, scheduleTypeComment="с 8 до 17, пн-пт"), [])
 
     def test_side_condition_is_kept_even_when_topic_is_concrete(self):
-        trips = item(topic="schedule")  # командировки — не общие слова о графике
+        trips = item(topic="schedule")  # подмены — не общие слова о графике
         (found,) = validate([trips], duty=DUTY, scheduleTypeComment="с 8 до 17, пн-пт")
-        self.assertEqual((found.topic, found.quote), ("schedule", "Возможны командировки"))
+        self.assertEqual((found.topic, found.quote), ("schedule", "Возможны подмены"))
 
     def test_ai_does_not_repeat_rules(self):
-        text = "Ведение документации и другие поручения руководителя. Возможны командировки."
+        text = "Ведение документации и другие поручения руководителя. Возможны подмены."
         duplicate = item(quote="другие поручения руководителя")
         self.assertEqual(validate([duplicate], duty=text), [])
-        after_gap = item(topic="employment", quote="Возможны командировки")
+        after_gap = item(topic="employment", quote="Возможны подмены")
         self.assertEqual(validate([after_gap], employment=None, duty=DUTY), [])
 
     def test_ai_may_add_another_place_on_a_topic_the_rules_touched(self):
-        text = "Ведение документации и другие поручения руководителя. Возможны командировки."
+        text = "Ведение документации и другие поручения руководителя. Возможны подмены."
         (found,) = validate([item()], duty=text)
-        self.assertEqual(found.quote, "Возможны командировки")
+        self.assertEqual(found.quote, "Возможны подмены")
 
     def test_strict_mode_needs_a_hedge_in_the_quote(self):
         plain = item(quote="Проведение инъекций и забор крови", problem="Не сказано, какие именно действия входят в эту работу.")
@@ -102,7 +102,7 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(len(ai_review.validate([plain], subject, known, facts, strict=False)), 1)
 
     def test_hedge_is_seen_in_every_form_of_the_word(self):
-        for phrase in ("Возможен выезд к пациентам", "Возможна работа в выходные", "Возможно совмещение"):
+        for phrase in ("Возможен перевод в другой кабинет", "Возможна замена коллег", "Возможно совмещение"):
             with self.subTest(phrase=phrase):
                 text = f"Проведение инъекций и забор крови. {phrase}."
                 (found,) = validate([item(quote=phrase)], duty=text)
@@ -113,23 +113,23 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(validate([item(problem=invented)], duty=DUTY), [])
         (found,) = validate([item(recommendation="Уточните, что значит «удобный график».")], duty=DUTY)
         self.assertEqual(found.recommendation, ai_review._FALLBACK_RECOMMENDATION["duties"])
-        (found,) = validate([item(problem="Фраза «возможны командировки» не говорит, как часто придётся ездить.")], duty=DUTY)
-        self.assertEqual(found.quote, "Возможны командировки")
+        (found,) = validate([item(problem="Фраза «возможны подмены» не говорит, как часто придётся ездить.")], duty=DUTY)
+        self.assertEqual(found.quote, "Возможны подмены")
 
     def test_long_quote_is_cut_at_a_word(self):
-        text = "Возможны командировки " + "по районам области и соседним регионам " * 8
+        text = "Возможны подмены " + "по районам области и соседним регионам " * 8
         (found,) = validate([item(quote=text)], duty=text)
         self.assertLessEqual(len(found.quote), ai_review.MAX_QUOTE_CHARS)
-        self.assertTrue(found.quote.startswith("Возможны командировки по районам"))
+        self.assertTrue(found.quote.startswith("Возможны подмены по районам"))
         self.assertIn(found.quote, text)
         self.assertFalse(found.quote.endswith(" "))
 
     def test_address_named_loosely_is_looked_up_in_the_address_field(self):
-        text = "Проведение инъекций. Работа в г. Светлогорске."
+        text = "Проведение инъекций. Приём граждан в г. Светлогорске."
         (found,) = validate(
             [
                 item(
-                    topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+                    topic="location", type="contradiction", field="duty", quote="Приём граждан в г. Светлогорске",
                     second_field="address", second_quote="г Калининград",
                     problem="В описании назван один город, а в адресе места работы другой.",
                 )
@@ -141,22 +141,22 @@ class ValidateTest(unittest.TestCase):
     def test_rule_findings_of_another_topic_or_kind_do_not_hide_ai_findings(self):
         # правило: адрес без дома (место работы, неоднозначность) и нет типа занятости (пропуск)
         changes = dict(
-            duty="Проведение инъекций. Возможны командировки. Работа в г. Светлогорске.",
+            duty="Проведение инъекций. Возможны подмены. Приём граждан в г. Светлогорске.",
             addresses={"address": [{"location": "Калининградская область, г Калининград"}]},
             employment=None,
         )
         clash = item(
-            topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+            topic="location", type="contradiction", field="duty", quote="Приём граждан в г. Светлогорске",
             second_field="addresses.address[0].location", second_quote="г Калининград",
             problem="В описании назван один город, а в адресе места работы другой.",
         )
-        found = validate([item(), clash, item(topic="employment", quote="Возможны командировки")], **changes)
+        found = validate([item(), clash, item(topic="employment", quote="Возможны подмены")], **changes)
         self.assertEqual([(entry.topic, entry.kind) for entry in found], [("duties", "ambiguity"), ("location", "contradiction")])
 
     def test_no_more_than_six_findings_per_vacancy(self):
         phrases = [
-            "Возможны командировки", "Иногда работа в выходные", "Возможно обучение", "Иногда дежурства",
-            "Возможна подмена коллег", "Иногда выезды на дом", "Возможны переработки",
+            "Возможны подмены", "Иногда помощь соседнему отделу", "Возможно обучение", "Иногда участие в совещаниях",
+            "Возможна подмена коллег", "Иногда замена на посту", "Возможны изменения в задачах",
         ]
         topics = ["duties", "duties", "requirements", "requirements", "title", "title", "employment"]
         text = "Проведение инъекций. " + ". ".join(phrases) + "."
@@ -174,9 +174,9 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(found.topic, "duties")
 
     def test_contradiction_needs_both_values(self):
-        text = "Проведение инъекций. Работа в г. Светлогорске."
+        text = "Проведение инъекций. Приём граждан в г. Светлогорске."
         good = item(
-            topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+            topic="location", type="contradiction", field="duty", quote="Приём граждан в г. Светлогорске",
             second_field="addresses.address[0].location", second_quote="г Калининград, Летняя улица",
             problem="В описании назван один город, а в адресе места работы другой.",
         )
@@ -185,12 +185,12 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(
             found.conflict,
             [
-                {"field": "duty", "value": "Работа в г. Светлогорске"},
+                {"field": "duty", "value": "Приём граждан в г. Светлогорске"},
                 {"field": "addresses.address[0].location", "value": "г Калининград, Летняя улица"},
             ],
         )
         self.assertEqual(validate([dict(good, second_quote="г Москва")], duty=text), [])
-        self.assertEqual(validate([dict(good, second_field="duty", second_quote="Работа в г. Светлогорске")], duty=text), [])
+        self.assertEqual(validate([dict(good, second_field="duty", second_quote="Приём граждан в г. Светлогорске")], duty=text), [])
 
     def test_zero_salary_bound_cannot_be_a_side_of_a_contradiction(self):
         claim = item(
@@ -206,11 +206,11 @@ class ValidateTest(unittest.TestCase):
         )
 
     def test_limits_and_duplicates(self):
-        text = "Проведение инъекций. Возможны командировки. Иногда работа в выходные. Прочие задачи отдела. Разное."
+        text = "Проведение инъекций. Возможны подмены. Иногда помощь соседнему отделу. Прочие задачи отдела. Разное."
         many = [
             item(),
             item(),
-            item(quote="Иногда работа в выходные"),
+            item(quote="Иногда помощь соседнему отделу"),
             item(quote="Прочие задачи отдела"),
         ]
         self.assertEqual(len(validate(many, duty=text)), ai_review.MAX_PER_TOPIC)
