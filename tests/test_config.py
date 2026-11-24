@@ -83,6 +83,9 @@ class ValuesTest(EnvCase):
             ("nvidia/nemotron-3.5-lightning:free", "qwen2.5:7b@http://localhost:11434/v1"),
         )
         self.assertEqual((settings.ai_api_key, settings.ai_timeout), ("sk-or-test", 600))
+        self.assertEqual(settings.ai_workers, 8)  # облачные запросы идут параллельно
+        self.assertEqual(self.load(TV_AI_WORKERS="3").ai_workers, 3)
+        del os.environ["TV_AI_WORKERS"]
         docker = self.load(TV_AI_LOCAL_URL="http://ollama:11434/v1", TV_AI_LOCAL_MODEL="gemma3:4b")
         self.assertEqual(docker.ai_fallback_models[-1], "gemma3:4b@http://ollama:11434/v1")
 

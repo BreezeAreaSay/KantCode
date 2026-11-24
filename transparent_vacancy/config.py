@@ -19,6 +19,10 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
 OPENROUTER_FALLBACKS = ("nvidia/nemotron-3.5-lightning:free",)
 OPENROUTER_TIMEOUT = 600  # отдельный ответ бесплатной модели занимал больше трёх минут
+# Ответ облачной модели идёт десятки секунд, а запросы независимы: 10 вакансий в 2 потока
+# заняли 4–6 минут, в 10 потоков 69 секунд при том же отчёте. Локальной модели это не поможет:
+# на одном процессоре она считает ответы по очереди.
+OPENROUTER_WORKERS = 8
 API_PAGE_LIMIT = 100  # больше портал за один запрос не отдаёт
 
 
@@ -93,7 +97,9 @@ class Settings:
         by_token = given("TV_AI_API_KEY") and not given("TV_AI_BASE_URL")
         if by_token:
             default_url, default_model, default_timeout = OPENROUTER_URL, OPENROUTER_MODEL, OPENROUTER_TIMEOUT
+            default_workers = OPENROUTER_WORKERS
         else:
+            default_workers = base.ai_workers
             default_url = text("TV_AI_LOCAL_URL", base.ai_base_url)
             default_model = text("TV_AI_LOCAL_MODEL", base.ai_model)
             default_timeout = base.ai_timeout
@@ -120,7 +126,7 @@ class Settings:
             ai_api_key=text("TV_AI_API_KEY", ""),
             ai_timeout=_integer("TV_AI_TIMEOUT", text("TV_AI_TIMEOUT", str(default_timeout)), 1),
             ai_retries=_integer("TV_AI_RETRIES", text("TV_AI_RETRIES", str(base.ai_retries)), 1),
-            ai_workers=_integer("TV_AI_WORKERS", text("TV_AI_WORKERS", str(base.ai_workers)), 1),
+            ai_workers=_integer("TV_AI_WORKERS", text("TV_AI_WORKERS", str(default_workers)), 1),
             ai_max_vacancies=_integer("TV_AI_MAX_VACANCIES", text("TV_AI_MAX_VACANCIES", "0"), 0),
             ai_strict=_flag(text("TV_AI_STRICT", "true")),
         )
