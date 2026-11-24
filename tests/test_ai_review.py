@@ -101,6 +101,13 @@ class ValidateTest(unittest.TestCase):
         known, facts = rules.analyze(subject)
         self.assertEqual(len(ai_review.validate([plain], subject, known, facts, strict=False)), 1)
 
+    def test_hedge_is_seen_in_every_form_of_the_word(self):
+        for phrase in ("Возможен выезд к пациентам", "Возможна работа в выходные", "Возможно совмещение"):
+            with self.subTest(phrase=phrase):
+                text = f"Проведение инъекций и забор крови. {phrase}."
+                (found,) = validate([item(quote=phrase)], duty=text)
+                self.assertEqual(found.quote, phrase)
+
     def test_topic_aliases(self):
         (found,) = validate([item(topic="duty")], duty=DUTY)
         self.assertEqual(found.topic, "duties")

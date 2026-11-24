@@ -96,10 +96,14 @@ def check_title(vacancy: Vacancy) -> list[Finding]:
 # --- обязанности -------------------------------------------------------------
 
 _OTHER_DUTIES = re.compile(
-    r"(?:и\s+)?(?:друг\w+|ин\w+|проч\w+)\s+(?:обязанност\w+|поручени\w+|функци\w+)"
-    r"|выполнени\w+\s+(?:ин\w+|друг\w+|проч\w+|разов\w+)\s+поручени\w+",
+    r"(?:(?:и\s+)?(?:друг\w+|ин\w+|проч\w+)\s+(?:обязанност\w+|поручени\w+|функци\w+)"
+    r"|(?:и\s+)?(?:друг\w+|ины[ехм]и?|проч\w+)\s+задач\w*"
+    r"|выполнени\w+\s+(?:ин\w+|друг\w+|проч\w+|разов\w+|различн\w+|разн\w+)\s+поручени\w+"
+    r"|(?:различн\w+|разн\w+)\s+поручени\w+)"
+    r"(?:\s+руководител\w+)?(?:\s+по\s+(?:мере\s+)?необходимости)?",
     I,
 )
+_MIN_DUTY_CHARS = 25  # короче этого описание обязанностей ни о чём не говорит
 _BY_INSTRUCTION = re.compile(
     r"(?:согласно|в\s+соответствии\s+с|по)\s+должностн\w+\s+(?:инструкци\w+|обязанност\w+)", I
 )
@@ -120,7 +124,7 @@ def check_duties(vacancy: Vacancy) -> list[Finding]:
                 "Попросите работодателя перечислить основные обязанности: что именно сотрудник делает в течение рабочего дня.",
             )
         ]
-    if fold(duty) == fold(vacancy.get("job-name")) or len(duty) < 25:
+    if fold(duty) == fold(vacancy.get("job-name")) or len(duty) < _MIN_DUTY_CHARS:
         return [
             Finding(
                 "duties",
@@ -144,6 +148,17 @@ def check_duties(vacancy: Vacancy) -> list[Finding]:
             )
         ]
     match = _OTHER_DUTIES.search(duty)
+    if match and len((duty[: match.start()] + duty[match.end() :]).strip(" .,;:")) < _MIN_DUTY_CHARS:
+        return [
+            Finding(
+                "duties",
+                AMBIGUITY,
+                "duty",
+                duty,
+                "Обязанности описаны общими словами: не названа ни одна конкретная задача.",
+                "Попросите работодателя перечислить конкретные задачи и участок работы.",
+            )
+        ]
     if match:
         return [
             Finding(
@@ -166,7 +181,9 @@ _EDUCATION_WORDS = re.compile(
 )
 _EXPERIENCE_WORDS = re.compile(r"\bопыт\w*|\bстаж\w*", I)
 _EXPERIENCE_YEARS = re.compile(
-    r"(?:опыт\w*|стаж\w*)[^.;|]{0,60}?(?:\bот|не\s+менее|более|свыше)\s+(\d{1,2})\s*(?:[-–]?\s*х\s*)?(?:лет|года|год)\b",
+    r"(?:опыт\w*|стаж\w*)[^.;|]{0,60}?(?:\bот|не\s+менее|более|свыше)\s+(\d{1,2})\s*(?:[-–]?\s*х\s*)?(?:лет|года|год)\b"
+    # и обратный порядок: «не менее 5 лет опыта работы»
+    r"|(?:\bот|не\s+менее|более|свыше)\s+(\d{1,2})\s*(?:[-–]?\s*х\s*)?(?:лет|года|год)\s+(?:\w+\s+){0,2}?(?:опыт\w+|стаж\w+)",
     I,
 )
 _EXPERIENCE_NONE = re.compile(
@@ -177,12 +194,30 @@ _OPTIONAL = re.compile(r"желател\w+|приветству\w+|преиму�
 _HIGHER_EDUCATION = re.compile(
     r"высш\w+\s+(?:\w+\s+){0,2}образовани\w+|образовани\w+\s*[:—–-]?\s*высш\w+", I
 )
+# Признаки того, что в тексте требований названо хоть что-то проверяемое: знания, навыки, документы.
+_CONCRETE_REQUIREMENT = re.compile(
+    r"знани\w+|\bзнать\b|навык\w*|умени\w+|\bуметь\b|владени\w+|\bвладеть\b|квалификац\w+|специальност\w+|професси\w+"
+    r"|удостоверени\w+|сертификат\w*|свидетельств\w+|допуск\w*|категори\w+|разряд\w*|\bправа\b|книжк\w+|справк\w+"
+    r"|обучени\w+|курс\w+|компьютер\w*|\bпк\b|программ\w+|язык\w*|\bречь\w*|грамотн\w+|интернет\w*",
+    I,
+)
 _NO_EDUCATION_NEEDED = ("ребования не предъявляются", "общее образование")
 _REQUIREMENT_TEXTS = ("requirements", "qualification", "requirement.qualification")
 
 
 def _optional_nearby(text: str, start: int, end: int) -> bool:
     return bool(_OPTIONAL.search(text[max(0, start - 50) : end + 30]))
+
+
+def _names_concrete_requirement(texts: list[tuple[str, str]]) -> bool:
+    """В тексте требований есть проверяемое условие, а не только личные качества и пожелания."""
+    for _, text in texts:
+        if _CONCRETE_REQUIREMENT.search(text):
+            return True
+        for match in _EXPERIENCE_WORDS.finditer(text):
+            if not _optional_nearby(text, match.start(), match.end()):
+                return True
+    return False
 
 
 def check_requirements(vacancy: Vacancy) -> list[Finding]:
@@ -204,17 +239,22 @@ def check_requirements(vacancy: Vacancy) -> list[Finding]:
             )
         ]
 
-    if not education and not _EDUCATION_WORDS.search(everything):
-        findings.append(
-            Finding(
-                "requirements",
-                GAP,
-                "requirement.education",
-                "",
-                "Не указано, какое образование требуется: поле образования пустое, в описании об этом тоже не сказано.",
-                "Уточните у работодателя требуемый уровень образования или отметьте, что требований к образованию нет.",
+    # Незаполненное образование само по себе не замечание: если требования названы по существу
+    # (знания, навыки, документы), соискателю понятно, чего от него ждут.
+    if not education and not _EDUCATION_WORDS.search(everything) and not _names_concrete_requirement(texts):
+        if texts:
+            problem = (
+                "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня "
+                "образования, ни конкретных знаний и навыков."
             )
-        )
+            advice = (
+                "Уточните у работодателя требуемый уровень образования и обязательные знания или навыки "
+                "либо отметьте, что требований к образованию нет."
+            )
+        else:
+            problem = "Не указано, какое образование требуется: поле образования не заполнено, текста требований нет."
+            advice = "Уточните у работодателя требуемый уровень образования или отметьте, что требований к образованию нет."
+        findings.append(Finding("requirements", GAP, "requirement.education", "", problem, advice))
     if experience is None and not _EXPERIENCE_WORDS.search(everything):
         findings.append(
             Finding(
@@ -243,7 +283,7 @@ def _experience_conflict(vacancy: Vacancy, experience: float, everything: str) -
         for match in _EXPERIENCE_YEARS.finditer(text):
             if _optional_nearby(text, match.start(), match.end()):
                 continue
-            mentions.append((name, excerpt(text, match.start(), match.end()), int(match.group(1))))
+            mentions.append((name, excerpt(text, match.start(), match.end()), int(match.group(1) or match.group(2))))
     years = {value for _, _, value in mentions}
     if len(years) == 1 and years != {int(experience)}:
         name, quote, value = mentions[0]
@@ -486,6 +526,12 @@ _VAGUE_SCHEDULE = re.compile(
     r"|ненормированн\w+\s+рабоч\w+\s+(?:день|время)|гибк\w+\s+(?:рабоч\w+\s+)?врем\w+",
     I,
 )
+_FLEXIBLE = r"(?:гибк\w+|свободн\w+|плавающ\w+|скользящ\w+|индивидуальн\w+)\s+график\w*"
+_OPTIONAL_FLEXIBLE = re.compile(
+    rf"(?:возмож\w+|допуска\w+)\s+(?:\w+\s+){{0,2}}?{_FLEXIBLE}"
+    rf"|{_FLEXIBLE}\s+(?:\w+\s+){{0,2}}?(?:возмож\w+|по\s+согласованию|по\s+договор[её]нности|обсуждается)",
+    I,
+)
 _PART_RATE = re.compile(r"\b0[,.]\d{1,2}\s*ставк\w*|\bпол\s*ставки\b", I)
 
 
@@ -493,6 +539,13 @@ def check_schedule(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     schedule = vacancy.get("schedule")
     shift = vacancy.get("shift")
     details = _search(vacancy, _SCHEDULE_DETAILS)
+    if not details:
+        # Расписание бывает вписано прямо в поле графика: «Сменный график: 2/2, 08:00–20:00».
+        for name in ("schedule", "shift"):
+            match = _SCHEDULE_DETAILS.search(vacancy.get(name))
+            if match:
+                details = (name, excerpt(vacancy.get(name), match.start(), match.end()))
+                break
     facts.schedule_concrete = bool(details)
     kind = fold(schedule)
 
@@ -525,6 +578,20 @@ def check_schedule(vacancy: Vacancy, facts: Facts) -> list[Finding]:
                     "График указан по-разному: в поле графика полный рабочий день, в описании — сменный режим.",
                     "Уточните у работодателя фактический режим работы и приведите поле графика и описание к одному значению.",
                     conflict=[{"field": "schedule", "value": schedule}, {"field": name, "value": quote}],
+                )
+            )
+    if details and not findings:
+        optional = _search(vacancy, _OPTIONAL_FLEXIBLE)
+        if optional:
+            name, quote = optional
+            findings.append(
+                Finding(
+                    "schedule",
+                    AMBIGUITY,
+                    name,
+                    quote,
+                    "Расписание названо, но рядом сказано, что возможен гибкий график: неясно, кому и на каких условиях он доступен.",
+                    "Уточните у работодателя, обязательно ли названное расписание и по каким правилам согласуется гибкий график.",
                 )
             )
     if findings or details:
@@ -577,10 +644,51 @@ def _vague_schedule(name: str, quote: str) -> Finding:
 
 # --- место работы ------------------------------------------------------------
 
+_FULLY_REMOTE = re.compile(
+    r"(?:полностью|исключительно|только)\s+(?:дистанционн|удал[её]нн)\w+"
+    r"|(?:дистанционн|удал[её]нн)\w+\s+(?:\w+\s+){0,2}?из\s+любо\w+\s+(?:города|региона|места|точки)",
+    I,
+)
+_ON_SITE_REQUIRED = re.compile(
+    r"(?:обязательн\w+|ежедневн\w+|постоянн\w+)\s+(?:\w+\s+){0,2}?присутстви\w+\s+(?:в|на)\s+(?:офисе|рабочем\s+месте|территории)"
+    r"|присутстви\w+\s+в\s+офисе\s+обязательн\w+|работа\s+(?:только|исключительно)\s+в\s+офисе",
+    I,
+)
+_STREET = re.compile(
+    r"\bул\b|улиц\w*|\bпр-?к?т\b|проспект\w*|\bпер\b|переул\w+|шоссе|\bнаб\b|набережн\w+|бульвар\w*|\bб-р\b"
+    r"|площад\w+|\bпл\b|проезд\w*|\bмкр\b|микрорайон\w*|тупик\w*|алле\w+|квартал\w*",
+    I,
+)
 _REMOTE = re.compile(r"удал[её]нн\w+\s+(?:работ\w+|формат\w*|режим\w*)|дистанционн\w+\s+(?:работ\w+|формат\w*|режим\w*)|работа\s+на\s+дому", I)
 
 
+def _format_conflict(vacancy: Vacancy) -> list[Finding]:
+    """В одном месте работа полностью дистанционная, в другом обязательно присутствие в офисе."""
+    remote = _search(vacancy, _FULLY_REMOTE)
+    on_site = _search(vacancy, _ON_SITE_REQUIRED)
+    if not remote or not on_site:
+        return []
+    return [
+        Finding(
+            "location",
+            CONTRADICTION,
+            remote[0],
+            remote[1],
+            "Место работы указано по-разному: в одном месте работа полностью дистанционная, в другом обязательно присутствие в офисе.",
+            "Уточните у работодателя, где выполняется работа: дистанционно или в офисе, и приведите описание к одному варианту.",
+            conflict=[
+                {"field": remote[0], "value": remote[1]},
+                {"field": on_site[0], "value": on_site[1]},
+            ],
+        )
+    ]
+
+
 def check_location(vacancy: Vacancy, facts: Facts) -> list[Finding]:
+    return _format_conflict(vacancy) + _check_address(vacancy, facts)
+
+
+def _check_address(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     names = vacancy.location_fields
     if not names:
         if _search(vacancy, _REMOTE):
@@ -601,13 +709,17 @@ def check_location(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     if exact:
         return []
     name = names[0]
+    if _STREET.search(vacancy.get(name)):
+        problem = "Адрес места работы неполный: нет номера дома, по такому адресу нельзя оценить дорогу."
+    else:
+        problem = "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома."
     return [
         Finding(
             "location",
             AMBIGUITY,
             name,
             vacancy.get(name),
-            "Адрес места работы неполный: нет номера дома, по такому адресу нельзя оценить дорогу.",
+            problem,
             "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
         )
     ]

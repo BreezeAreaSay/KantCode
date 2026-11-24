@@ -59,6 +59,13 @@ class DutiesTest(unittest.TestCase):
     def test_too_short(self):
         self.assertEqual(kinds(duty="стирка белья"), [("duties", "ambiguity")])
 
+    def test_nothing_but_unnamed_errands(self):
+        for duty in ("Выполнение различных поручений руководителя.", "Работа с документами и другие задачи по необходимости."):
+            with self.subTest(duty=duty):
+                (item,) = findings(duty=duty)
+                self.assertEqual((item.topic, item.kind, item.quote), ("duties", "ambiguity", duty))
+                self.assertIn("ни одна конкретная задача", item.problem)
+
 
 class RequirementsTest(unittest.TestCase):
     def test_structured_fields_alone_are_enough(self):
@@ -95,6 +102,32 @@ class RequirementsTest(unittest.TestCase):
     def test_no_experience_needed_against_field(self):
         result = kinds(requirement={"education": "Общее образование", "experience": 3}, requirements="Можно без опыта")
         self.assertEqual(result, [("requirements", "contradiction")])
+
+    def test_experience_conflict_when_years_come_before_the_word(self):
+        (item,) = findings(
+            requirement={"education": "Высшее", "experience": 0, "qualification": "Требуется не менее 5 лет опыта работы аналитиком."},
+            requirements="Знание SQL.",
+        )
+        self.assertEqual((item.topic, item.kind), ("requirements", "contradiction"))
+        self.assertEqual(item.conflict[0], {"field": "requirement.experience", "value": "0"})
+        self.assertEqual(item.conflict[1], {"field": "requirement.qualification", "value": "не менее 5 лет опыта"})
+
+    def test_unfilled_education_is_fine_when_requirements_are_concrete(self):
+        for text in ("Внимательность, базовые навыки работы на компьютере.", "Знание SQL и электронных таблиц.", "Опыт разработки учебных материалов."):
+            with self.subTest(text=text):
+                self.assertEqual(kinds(requirement={"education": "Не указано", "experience": 0}, requirements=text), [])
+
+    def test_unfilled_education_with_only_general_words_is_gap(self):
+        for text in ("Ответственность, активность.", "Опыт работы приветствуется."):
+            with self.subTest(text=text):
+                (item,) = findings(requirement={"education": "Не указано", "experience": 0}, requirements=text)
+                self.assertEqual((item.topic, item.kind, item.field, item.quote), ("requirements", "gap", "requirement.education", ""))
+                self.assertIn("общими словами", item.problem)
+
+    def test_unfilled_education_without_any_requirement_text_is_gap(self):
+        (item,) = findings(requirement={"education": "Не указано", "experience": 0}, requirements="", qualification="")
+        self.assertEqual((item.topic, item.kind, item.field), ("requirements", "gap", "requirement.education"))
+        self.assertIn("текста требований нет", item.problem)
 
     def test_education_conflict(self):
         result = kinds(
@@ -170,6 +203,23 @@ class ScheduleTest(unittest.TestCase):
     def test_timetable_in_schedule_comment(self):
         self.assertEqual(kinds(schedule="Сменная работа", scheduleTypeComment="08.00 - 17.00 ПН-ПТ"), [])
 
+    def test_timetable_written_into_the_schedule_field(self):
+        for schedule in ("Сменный график: 2/2, 08:00–20:00", "Понедельник–пятница, 10:00–19:00", "Полный рабочий день, 5/2"):
+            with self.subTest(schedule=schedule):
+                self.assertEqual(kinds(schedule=schedule), [])
+        self.assertEqual(kinds(schedule="Сменный график"), [("schedule", "ambiguity")])
+
+    def test_flexible_schedule_offered_next_to_a_fixed_one(self):
+        (item,) = findings(
+            schedule="Гибкий график",
+            qualification="Пятидневная рабочая неделя с 09:00 до 18:00. Возможен гибкий график без уточнения правил.",
+        )
+        self.assertEqual((item.topic, item.kind, item.field), ("schedule", "ambiguity", "qualification"))
+        self.assertEqual(item.quote, "Возможен гибкий график")
+
+    def test_flexible_field_with_timetable_elsewhere_is_fine(self):
+        self.assertEqual(kinds(schedule="Гибкий график", scheduleTypeComment="08.00 - 17.00 ПН-ПТ"), [])
+
     def test_flexible_schedule_from_the_task_statement(self):
         (item,) = findings(schedule=None, duty="Проведение инъекций и забор крови. Гибкий график.")
         self.assertEqual((item.topic, item.kind, item.field, item.quote), ("schedule", "ambiguity", "duty", "Гибкий график."))
@@ -210,6 +260,27 @@ class LocationTest(unittest.TestCase):
         (item,) = findings(addresses={"address": [{"location": "Калининградская область, г Калининград"}]})
         self.assertEqual((item.topic, item.kind, item.field), ("location", "ambiguity", "addresses.address[0].location"))
         self.assertEqual(item.quote, "Калининградская область, г Калининград")
+        self.assertIn("только населённый пункт", item.problem)
+
+    def test_street_without_house(self):
+        (item,) = findings(addresses={"address": [{"location": "г Калининград, Московский проспект"}]})
+        self.assertIn("нет номера дома", item.problem)
+
+    def test_fully_remote_against_required_presence(self):
+        (item,) = findings(
+            duty="Приём звонков и регистрация обращений. Работа полностью дистанционная из любого города.",
+            qualification="Обязательное ежедневное присутствие в офисе в Калининграде к 09:00.",
+        )
+        self.assertEqual((item.topic, item.kind, item.field), ("location", "contradiction", "duty"))
+        self.assertEqual(item.conflict[0], {"field": "duty", "value": "полностью дистанционная"})
+        self.assertEqual(item.conflict[1]["field"], "qualification")
+        self.assertIn("присутствие в офисе", item.conflict[1]["value"])
+
+    def test_partly_remote_work_does_not_contradict_the_office(self):
+        self.assertEqual(
+            kinds(duty="Сопровождение информационных систем. Частично возможна удалённая работа.", qualification="Работа в офисе."),
+            [],
+        )
 
 
 class EmploymentTest(unittest.TestCase):
