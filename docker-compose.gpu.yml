@@ -1,0 +1,12 @@
+# Дополнение для машин с видеокартой NVIDIA: локальная модель считает на ней, а не на процессоре.
+# Нужны драйвер NVIDIA и Docker Desktop с WSL 2 (Windows) или NVIDIA Container Toolkit (Linux).
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile local run --rm app models
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

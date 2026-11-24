@@ -142,6 +142,9 @@ docker compose run --rm app letters --report /data/report.json    # письма
 
 - Отчёты появляются в каталоге `reports/` рядом с `docker-compose.yml` (в контейнере это `/data`).
 - Свой файл для проверки положите в каталог `input/`: в контейнере он виден как `/input/<имя файла>`.
+- С видеокартой NVIDIA локальная модель считает на ней, если добавить файл
+  `docker-compose.gpu.yml`: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile local …`.
+  Без него Ollama в контейнере считает на процессоре.
 - Если Ollama уже установлена на самой машине, профиль не нужен: впишите в `.env`
   `TV_AI_BASE_URL=http://host.docker.internal:11434/v1`.
 - Оба способа работают и вместе: впишите ключ и запускайте с `--profile local`.
