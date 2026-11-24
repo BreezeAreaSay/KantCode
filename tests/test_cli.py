@@ -122,6 +122,15 @@ class RunTest(CliCase):
         self.assertIn("ОШИБКА источника", output)
         self.assertIn("последний успешный отчёт сохранён", output)
 
+    def test_empty_answer_from_portal_does_not_erase_the_report(self):
+        self.call("run")
+        before = (self.dir / "reports" / "report.json").read_bytes()
+        self.portal.vacancies = []  # портал отвечает «успешно, 0 записей», как на неверный адрес
+        code, output = self.call("run")
+        self.assertEqual(code, cli.EXIT_SOURCE)
+        self.assertEqual((self.dir / "reports" / "report.json").read_bytes(), before)
+        self.assertIn("не вернул ни одной вакансии", self.status()["error"])
+
     def test_portal_failure_without_earlier_report(self):
         self.portal.fail_with = 500
         code, output = self.call("run")
