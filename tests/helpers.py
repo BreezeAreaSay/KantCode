@@ -60,7 +60,7 @@ def api_response(vacancies: list[dict], total: int | None = None) -> dict:
 class _Server:
     def __init__(self, handler):
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
         self.thread.start()
 
     @property
