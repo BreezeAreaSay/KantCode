@@ -17,7 +17,7 @@ from .rules import GENERIC_VAGUE, Facts
 from .textutil import clean_text, find_quote, fold
 from .vacancy import Vacancy
 
-PROMPT_VERSION = "8"
+PROMPT_VERSION = "9"
 MAX_FIELD_CHARS = 2500
 MAX_QUOTE_CHARS = 200
 MIN_QUOTE_TO_SEARCH = 4  # короче этого цитату в других полях не ищем
@@ -99,6 +99,47 @@ _HEDGE = re.compile(
     r"|определя[ею]тся|устанавлива[ею]тся|рассматрива[ею]тся",
     re.I,
 )
+
+# О чём говорит значение: противоречие возможно, только если обе стороны говорят об одном и том же.
+_SUBJECT_WORDS = {
+    "money": re.compile(r"руб\w*|₽|зарплат\w*|заработн\w+|оплат\w+|оклад\w*|доход\w*|\d[\d ]{3,}", re.I),
+    "schedule": re.compile(
+        r"график\w*|смен\w+|выходн\w+|\d{1,2}[:.]\d{2}|(?<![\d/])\d\s*/\s*\d(?![\d/])|рабоч\w+\s+(?:день|дня|недел\w+|врем\w+)"
+        r"|час\w*|пятидневк\w*|сутк\w+|вахт\w+|ненормированн\w+",
+        re.I,
+    ),
+    "experience": re.compile(r"опыт\w*|стаж\w*|\bлет\b|\bгод\w*|младш\w+|старш\w+|ведущ\w+|главн\w+|стаж[её]р\w*|начинающ\w+", re.I),
+    "education": re.compile(r"образовани\w+|высш\w+|средн\w+\s+(?:специальн|профессиональн)\w+|диплом\w*|бакалавр\w*|магистр\w*", re.I),
+    "place": re.compile(
+        r"\bг\.|\bгород\w*|офис\w*|удал[её]нн\w+|дистанционн\w+|адрес\w*|\bул\b|улиц\w+|район\w*|посел\w+|пос\.|область|на\s+дому"
+        r"|в\s+[А-ЯЁ][а-яё]+(?:ске|ге|граде|ино|ово|еве|ове)\b",
+    ),
+    "employment": re.compile(r"занятост\w+|ставк\w+|совместител\w+|временн\w+|постоянн\w+|сезонн\w+|срочн\w+|договор\w*", re.I),
+}
+_FIELD_SUBJECT = {
+    "salary": "money",
+    "salary_min": "money",
+    "salary_max": "money",
+    "schedule": "schedule",
+    "shift": "schedule",
+    "scheduleTypeComment": "schedule",
+    "requirement.experience": "experience",
+    "requirement.education": "education",
+    "employment": "employment",
+    "term.text": "employment",
+    "addressOffice": "place",
+}
+
+
+def _subjects(field: str, value: str) -> set[str]:
+    """Темы, о которых говорит значение поля: по имени поля и по словам в нём."""
+    found = {subject for subject, words in _SUBJECT_WORDS.items() if words.search(value)}
+    if field in _FIELD_SUBJECT:
+        found.add(_FIELD_SUBJECT[field])
+    if field.startswith("addresses."):
+        found.add("place")
+    return found
+
 
 _TOPIC_ALIASES = {
     "duty": "duties",
@@ -227,6 +268,8 @@ def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts, strict
             second = _locate(vacancy, item.get("second_field", ""), item.get("second_quote", ""))
             if second is None or second == first:
                 continue
+            if not (_subjects(*first) & _subjects(*second)):
+                continue  # стороны говорят о разном: обязанности и подразделение не противоречат друг другу
             conflict = [
                 {"field": first[0], "value": first[1]},
                 {"field": second[0], "value": second[1]},

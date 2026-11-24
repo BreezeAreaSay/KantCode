@@ -205,6 +205,37 @@ class ValidateTest(unittest.TestCase):
             [],
         )
 
+    def test_contradiction_between_sides_about_different_things_is_dropped(self):
+        duty = "Осмотр и техническое обслуживание электрического оборудования, замена ламп."
+        qualification = "Работа в службе внутреннего сервиса, обслуживание электрооборудования в подразделении свиноводства."
+        claim = item(
+            topic="duties", type="contradiction", field="duty", quote="Осмотр и техническое обслуживание электрического оборудования",
+            second_field="qualification", second_quote="Работа в службе внутреннего сервиса",
+            problem="Обязанности описаны иначе, чем подразделение, в котором предстоит работать.",
+        )
+        self.assertEqual(validate([claim], duty=duty, qualification=qualification), [])
+
+    def test_contradictions_about_the_same_thing_are_kept(self):
+        cases = (
+            (dict(schedule="Гибкий график", qualification="Пятидневная рабочая неделя с 09:00 до 18:00."),
+             "schedule", "schedule", "Гибкий график", "qualification", "Пятидневная рабочая неделя с 09:00 до 18:00"),
+            (dict(requirement={"education": "Высшее", "experience": 0}, requirements="Опыт разработки учебных материалов."),
+             "requirements", "requirements", "Опыт разработки учебных материалов", "requirement.experience", "0"),
+            (dict(job__name="Младший аналитик данных", qualification="Требуется не менее 5 лет опыта работы аналитиком."),
+             "title", "job-name", "Младший аналитик данных", "qualification", "не менее 5 лет опыта"),
+        )
+        for changes, topic, field, quote, second_field, second_quote in cases:
+            with self.subTest(quote=quote):
+                claim = item(
+                    topic=topic, type="contradiction", field=field, quote=quote,
+                    second_field=second_field, second_quote=second_quote,
+                    problem="Два поля вакансии сообщают об этом по-разному, соискатель не поймёт, что верно.",
+                )
+                subject = Vacancy(vacancy(**changes))
+                facts = rules.analyze(subject)[1]
+                found = ai_review.validate([claim], subject, [], facts)
+                self.assertEqual(len(found), 1)
+
     def test_limits_and_duplicates(self):
         text = "Проведение инъекций. Возможны подмены. Иногда помощь соседнему отделу. Прочие задачи отдела. Разное."
         many = [
