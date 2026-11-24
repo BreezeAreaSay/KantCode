@@ -13,7 +13,7 @@ import re
 
 from .findings import AMBIGUITY, CONTRADICTION, GAP, TOPICS, Finding
 from .llm import ChatClient
-from .rules import Facts
+from .rules import GENERIC_VAGUE, Facts
 from .textutil import clean_text, find_quote, fold
 from .vacancy import Vacancy
 
@@ -82,6 +82,38 @@ _FALLBACK_RECOMMENDATION = {
     "employment": "Уточните у работодателя тип занятости.",
 }
 
+# Признак расплывчатости: оговорка, открытый перечень или оценочное слово без меры.
+# В строгом режиме неоднозначность от модели принимается, только если такой признак есть в цитате:
+# так модель не может объявить расплывчатой обычную конкретную фразу.
+_HEDGE = re.compile(
+    r"возможн\w*|иногда|периодическ\w+|при\s+необходимости|по\s+необходимости|по\s+мере\s+необходимости"
+    r"|договор[её]нност\w+|договорн\w+|обсужда\w+|уточня\w+|согласован\w+|согласовыва\w+"
+    r"|по\s+(?:результатам|итогам)|на\s+собеседовани\w+|в\s+зависимости|зависит|как\s+правило|в\s+основном"
+    r"|преимущественно|частично|примерно|около|ориентировочно|и\s+т\.\s?[дп]\b|и\s+др\b|и\s+проч\w*"
+    r"|(?:друг\w+|ин\w+|проч\w+|различн\w+|разн\w+|дополнительн\w+)\s+(?:обязанност\w+|поручени\w+|задач\w*|работ\w*|функци\w+|нагрузк\w+)"
+    r"|гибк\w+|свободн\w+|удобн\w+|плавающ\w+|скользящ\w+|ненормированн\w+|индивидуальн\w+"
+    r"|достойн\w+|конкурентн\w+|стабильн\w+|высок\w+\s+(?:заработн\w+|зарплат\w+|доход\w*|оплат\w+)"
+    r"|\bможет\b|\bмогут\b|разъездн\w+|командировк\w+|переработк\w+|сверхурочн\w+"
+    r"|определя[ею]тся|устанавлива[ею]тся|рассматрива[ею]тся",
+    re.I,
+)
+
+_TOPIC_ALIASES = {
+    "duty": "duties",
+    "обязанности": "duties",
+    "requirement": "requirements",
+    "требования": "requirements",
+    "job-name": "title",
+    "название должности": "title",
+    "оплата": "salary",
+    "зарплата": "salary",
+    "график": "schedule",
+    "график работы": "schedule",
+    "место работы": "location",
+    "address": "location",
+    "тип занятости": "employment",
+}
+
 _TYPE_ALIASES = {
     "ambiguity": AMBIGUITY,
     "неоднозначность": AMBIGUITY,
@@ -142,8 +174,31 @@ def _invents_numbers(text: str, vacancy: Vacancy) -> bool:
     return any(len(number) > 1 and number not in known for number in _NUMBER.findall(text))
 
 
-def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts) -> list[Finding]:
-    """Отбирает из ответа модели замечания, которые подтверждаются текстом вакансии."""
+def _same_point(rule: Finding, topic: str, kind: str, quote: str) -> bool:
+    """Правило уже сообщило о том же: пропуск по теме или то же место текста."""
+    if rule.topic != topic:
+        return False
+    if rule.kind == GAP:
+        return True
+    if rule.kind != kind:
+        return False
+    mine = _words(quote)
+    for value in [rule.quote] + [side["value"] for side in rule.conflict]:
+        theirs = _words(value)
+        if mine and theirs and len(mine & theirs) * 2 >= min(len(mine), len(theirs)):
+            return True  # цитаты пересекаются хотя бы наполовину: это одно и то же место
+    return False
+
+
+def _words(text: str) -> set[str]:
+    return {word for word in re.findall(r"\w+", fold(text)) if len(word) > 2}
+
+
+def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts, strict: bool = True) -> list[Finding]:
+    """Отбирает из ответа модели замечания, которые подтверждаются текстом вакансии.
+
+    ``strict`` требует признак расплывчатости в цитате неоднозначности (``TV_AI_STRICT``).
+    """
     concrete = {
         "salary": facts.salary_concrete,
         "schedule": facts.schedule_concrete,
@@ -157,6 +212,7 @@ def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts) -> lis
         if not isinstance(item, dict):
             continue
         topic = clean_text(item.get("topic")).lower()
+        topic = _TOPIC_ALIASES.get(topic, topic)
         kind = _TYPE_ALIASES.get(clean_text(item.get("type")).lower())
         if topic not in TOPICS or kind is None:
             continue
@@ -172,9 +228,11 @@ def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts) -> lis
                 {"field": first[0], "value": first[1]},
                 {"field": second[0], "value": second[1]},
             ]
-        elif concrete.get(topic):
-            continue  # по теме есть конкретные сведения: расплывчатая фраза не проблема
-        if any(rule.topic == topic and rule.kind in (kind, GAP) for rule in known):
+        elif concrete.get(topic) and topic in GENERIC_VAGUE and GENERIC_VAGUE[topic].search(first[1]):
+            continue  # по теме есть конкретные сведения: общие слова о ней не проблема
+        elif strict and not _HEDGE.search(first[1]):
+            continue  # в цитате нет ни оговорки, ни оценочного слова: это обычная конкретная фраза
+        if any(_same_point(rule, topic, kind, first[1]) for rule in known):
             continue  # правила уже сказали об этом
         problem = _sentence(item.get("problem"))
         recommendation = _sentence(item.get("recommendation"))
@@ -203,7 +261,9 @@ def validate(items, vacancy: Vacancy, known: list[Finding], facts: Facts) -> lis
     return accepted
 
 
-def review(client: ChatClient, vacancy: Vacancy, known: list[Finding], facts: Facts) -> list[Finding]:
+def review(
+    client: ChatClient, vacancy: Vacancy, known: list[Finding], facts: Facts, strict: bool = True
+) -> list[Finding]:
     """Спрашивает модель и возвращает только проверенные замечания. Сбой модели — ``AIError``."""
     reply = client.complete_json(SYSTEM_PROMPT, build_request(vacancy, known))
-    return validate(reply.get("findings"), vacancy, known, facts)
+    return validate(reply.get("findings"), vacancy, known, facts, strict)

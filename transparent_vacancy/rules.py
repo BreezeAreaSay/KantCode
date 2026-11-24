@@ -697,6 +697,10 @@ def check_employment(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     return []
 
 
+# Общие слова о теме. Если по теме есть конкретные сведения, такая фраза не проблема.
+GENERIC_VAGUE = {"salary": _VAGUE_SALARY, "schedule": _VAGUE_SCHEDULE}
+
+
 def analyze(vacancy: Vacancy) -> tuple[list[Finding], Facts]:
     """Все замечания правил по вакансии и признаки для фильтра ответов ИИ."""
     facts = Facts()

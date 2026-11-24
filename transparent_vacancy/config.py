@@ -64,6 +64,7 @@ class Settings:
     ai_timeout: int = 180
     ai_workers: int = 2
     ai_max_vacancies: int = 0  # 0 — без ограничения
+    ai_strict: bool = True  # неоднозначность от модели только с признаком расплывчатости в цитате
 
     @classmethod
     def load(cls, env_file: str | os.PathLike | None = ".env") -> "Settings":
@@ -89,6 +90,7 @@ class Settings:
             ai_timeout=_integer("TV_AI_TIMEOUT", text("TV_AI_TIMEOUT", str(base.ai_timeout)), 1),
             ai_workers=_integer("TV_AI_WORKERS", text("TV_AI_WORKERS", str(base.ai_workers)), 1),
             ai_max_vacancies=_integer("TV_AI_MAX_VACANCIES", text("TV_AI_MAX_VACANCIES", "0"), 0),
+            ai_strict=_flag(text("TV_AI_STRICT", "true")),
         )
         if not settings.source_url.lower().startswith(("http://", "https://")):
             raise ConfigError("TV_SOURCE_URL: нужен адрес, начинающийся с http:// или https://")
