@@ -11,7 +11,8 @@
 **Работает сразу после клонирования, без настроек и установки пакетов** (нужен только Python 3.11+):
 
 ```bash
-git clone https://github.com/BreezeAreaSay/KantCode.git && cd KantCode
+git clone https://github.com/BreezeAreaSay/KantCode.git
+cd KantCode
 python -m transparent_vacancy check examples/kantkod_sample_vacancies.json --out report.json
 python -m transparent_vacancy html --report report.json      # открыть report.html в браузере
 ```
@@ -33,12 +34,14 @@ python -m transparent_vacancy html --report report.json      # открыть re
 Какая модель отвечает, видно заранее: `docker compose run --rm app models`
 (для способа Б — с `--profile local`).
 
-**Без Docker:**
+**Без Docker.** Ключ для способа А впишите в тот же файл `.env` или задайте в
+терминале: `$env:TV_AI_API_KEY="<ключ>"` в PowerShell, `export TV_AI_API_KEY='<ключ>'`
+в Linux и macOS. Без ключа сервис обращается к Ollama на этой машине.
 
 ```bash
-TV_AI_API_KEY='<ключ>' python -m transparent_vacancy check ваш_файл.json --out report.json   # способ А
-python -m transparent_vacancy check ваш_файл.json --out report.json                          # Ollama на этой машине
-python -m unittest discover -s tests -t .                                                    # 253 теста, без сети
+python -m transparent_vacancy check ваш_файл.json --out report.json
+python -m transparent_vacancy models                                 # какие модели отвечают
+python -m unittest discover -s tests -t .                            # 253 теста, без сети
 ```
 
 | Что | Где |
