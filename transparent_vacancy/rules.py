@@ -101,7 +101,12 @@ def _title_against_experience(vacancy: Vacancy, title: str) -> list[Finding]:
     ]
 
 
-def check_title(vacancy: Vacancy) -> list[Finding]:
+# Обязанности описаны настолько подробно, что общее название («Ведущий специалист») уже не мешает
+# понять работу: в госорганах это официальное название должности.
+_DETAILED_DUTIES_CHARS = 100
+
+
+def check_title(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     title = vacancy.get("job-name")
     if not title:
         return [
@@ -115,6 +120,19 @@ def check_title(vacancy: Vacancy) -> list[Finding]:
             )
         ]
     if fold(title).strip(" .") in _GENERIC_TITLES:
+        duty = vacancy.get("duty")
+        if len(duty) >= _DETAILED_DUTIES_CHARS:
+            facts.notes.append(
+                Finding(
+                    "title",
+                    NOTE,
+                    "job-name",
+                    title,
+                    "Название должности общее, но обязанности описаны подробно: по ним понятно, чем предстоит заниматься.",
+                    "При случае попросите работодателя дополнить название направлением работы.",
+                )
+            )
+            return _title_against_experience(vacancy, title)
         return [
             Finding(
                 "title",
@@ -717,6 +735,10 @@ _STREET = re.compile(
     r"|площад\w+|\bпл\b|проезд\w*|\bмкр\b|микрорайон\w*|тупик\w*|алле\w+|квартал\w*",
     I,
 )
+_VILLAGE = re.compile(
+    r"посел\w*|пос[её]л\w*|\bпос\b|\bп\.\s|\bсело\b|\bс\.\s|деревн\w+|\bд\.\s|хутор\w*|\bх\.\s|\bпгт\b|\bст\.\s",
+    I,
+)
 _REMOTE = re.compile(r"удал[её]нн\w+\s+(?:работ\w+|формат\w*|режим\w*)|дистанционн\w+\s+(?:работ\w+|формат\w*|режим\w*)|работа\s+на\s+дому", I)
 
 
@@ -802,6 +824,20 @@ def _check_address(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     if exact:
         return []
     name = names[0]
+    if _VILLAGE.search(vacancy.get(name)) and not _STREET.search(vacancy.get(name)):
+        # В посёлке или селе улиц и номеров домов может не быть вовсе: это пометка, а не замечание.
+        facts.notes.append(
+            Finding(
+                "location",
+                NOTE,
+                name,
+                vacancy.get(name),
+                "В адресе назван посёлок или село без улицы и дома. В небольшом населённом пункте их может не быть, "
+                "но соискателю полезно знать, где именно рабочее место.",
+                "При случае попросите работодателя уточнить, как найти рабочее место: ориентир или название объекта.",
+            )
+        )
+        return []
     if _STREET.search(vacancy.get(name)):
         problem = "Адрес места работы неполный: нет номера дома, по такому адресу нельзя оценить дорогу."
     else:
@@ -1033,7 +1069,7 @@ def analyze(vacancy: Vacancy) -> tuple[list[Finding], Facts]:
     """Все замечания правил по вакансии и признаки для фильтра ответов ИИ."""
     facts = Facts()
     findings: list[Finding] = []
-    findings += check_title(vacancy)
+    findings += check_title(vacancy, facts)
     findings += check_duties(vacancy)
     findings += check_requirements(vacancy)
     findings += check_salary(vacancy, facts)

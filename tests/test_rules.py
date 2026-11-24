@@ -59,6 +59,17 @@ class TitleTest(unittest.TestCase):
         self.assertEqual(kinds(job__name="Младший воспитатель"), [])
         self.assertEqual(kinds(job__name="Младшая медицинская сестра", requirements="Желателен опыт работы от 3 лет"), [])
 
+    def test_generic_title_with_detailed_duties_is_a_note(self):
+        duty = (
+            "Подготовка проектов постановлений администрации, ведение реестра муниципального имущества, "
+            "приём граждан по вопросам землепользования."
+        )
+        self.assertEqual(kinds(job__name="Ведущий специалист", duty=duty), [])
+        (note,) = rules.analyze(Vacancy(vacancy(job__name="Ведущий специалист", duty=duty)))[1].notes
+        self.assertEqual((note.topic, note.kind, note.quote), ("title", "note", "Ведущий специалист"))
+        # мало обязанностей: название остаётся замечанием, как у «Специалиста» в учебном примере
+        self.assertEqual(kinds(job__name="Специалист", duty="Работа с документами по профилю отдела."), [("title", "ambiguity")])
+
     def test_specific_title_is_fine(self):
         self.assertEqual(kinds(job__name="Специалист по охране труда"), [])
 
@@ -346,6 +357,21 @@ class LocationTest(unittest.TestCase):
         self.assertEqual((item.topic, item.kind, item.field), ("location", "ambiguity", "addresses.address[0].location"))
         self.assertEqual(item.quote, "Калининградская область, г Калининград")
         self.assertIn("только населённый пункт", item.problem)
+
+    def test_village_without_street_is_a_note(self):
+        for location in (
+            "Калининградская область, Гвардейский район, Ершово поселок, -, место работы пос. Ершово",
+            "Калининградская область, Зеленоградский район, с. Луговое",
+        ):
+            with self.subTest(location=location):
+                subject = Vacancy(vacancy(addresses={"address": [{"location": location}]}))
+                found, facts = rules.analyze(subject)
+                self.assertEqual(found, [])
+                self.assertEqual([(note.topic, note.kind) for note in facts.notes], [("location", "note")])
+        # город без улицы и дома или одна область остаются замечанием
+        for location in ("г. Черняховск", "Калининградская область"):
+            with self.subTest(location=location):
+                self.assertEqual(kinds(addresses={"address": [{"location": location}]}), [("location", "ambiguity")])
 
     def test_street_without_house(self):
         (item,) = findings(addresses={"address": [{"location": "г Калининград, Московский проспект"}]})
