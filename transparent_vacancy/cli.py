@@ -14,6 +14,7 @@ from pathlib import Path
 from . import __version__
 from .analyzer import analyze_vacancies, build_report
 from .config import ConfigError, Settings
+from .letters import build_letters
 from .scheduler import Cron, ScheduleError, run_forever
 from .source import SourceError, fetch_vacancies
 from .store import CACHE_NAME, REPORT_NAME, STATUS_NAME, Cache, read_json, write_json
@@ -163,6 +164,25 @@ def check_files(settings: Settings, files: list[str], out: Path, require_ai: boo
     return EXIT_OK
 
 
+def write_letters(report_path: Path, out_dir: Path, only_id: str | None) -> int:
+    """Дополнительный сценарий: черновики запросов работодателям по готовому отчёту."""
+    report = read_json(report_path)
+    if not isinstance(report, dict) or not isinstance(report.get("vacancies"), list):
+        log(f"ОШИБКА: {report_path} не является отчётом. Сначала выполните run или check.")
+        return EXIT_USAGE
+    if only_id:
+        report = {"vacancies": [entry for entry in report["vacancies"] if entry.get("id") == only_id]}
+        if not report["vacancies"]:
+            log(f"ОШИБКА: вакансии с ID {only_id} в отчёте нет")
+            return EXIT_USAGE
+    letters = build_letters(report)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, text in letters.items():
+        (out_dir / name).write_text(text, encoding="utf-8")
+    log(f"писем: {len(letters)} из {len(report['vacancies'])} вакансий, каталог {out_dir}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="transparent_vacancy",
@@ -193,6 +213,11 @@ def build_parser() -> argparse.ArgumentParser:
     schedule.add_argument("--cron", help="cron-выражение (TV_SCHEDULE)")
     schedule.add_argument("--run-on-start", action="store_true", help="сначала выполнить один запуск сразу")
     common(schedule)
+
+    letters = commands.add_parser("letters", help="доп. сценарий: черновики запросов работодателям по отчёту")
+    letters.add_argument("--report", help="отчёт (по умолчанию <каталог отчёта>/report.json)")
+    letters.add_argument("--out-dir", help="куда сохранить письма (по умолчанию <каталог отчёта>/letters)")
+    letters.add_argument("--id", help="только вакансия с этим ID")
     return parser
 
 
@@ -200,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         settings = Settings.load(args.env_file)
+        if args.command == "letters":
+            report_path = Path(args.report) if args.report else settings.output_dir / REPORT_NAME
+            out_dir = Path(args.out_dir) if args.out_dir else settings.output_dir / "letters"
+            return write_letters(report_path, out_dir, args.id)
         if args.no_ai:
             settings.ai_enabled = False
         if args.ai_limit is not None:
