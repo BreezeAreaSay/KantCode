@@ -37,6 +37,8 @@ TEXT_FIELDS = (
     "addressOffice",
 )
 
+_SALARY_BOUNDS = ("salary_min", "salary_max")
+
 # Поля свободного текста: в них ищем упоминания графика, оплаты, опыта.
 FREE_TEXT_FIELDS = (
     "duty",
@@ -95,6 +97,8 @@ class Vacancy:
             value = _dig(raw, path)
             if path == "term.text" and value is None and isinstance(raw.get("term"), str):
                 value = raw.get("term")
+            if path in _SALARY_BOUNDS and _as_number(value) == 0:
+                continue  # ноль в границе зарплаты значит «не указано», а не сумму
             text = _join(value)
             if text and not is_placeholder(text):
                 self.fields[path] = text

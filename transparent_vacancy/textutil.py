@@ -60,10 +60,11 @@ def find_quote(haystack: str, quote: str) -> str:
         return ""
     # fold() не меняет длину строки, пока пробелы уже одинарные: clean_text это гарантирует.
     folded = haystack.lower().replace("ё", "е")
-    start = folded.find(needle)
-    if start < 0:
+    # Только целые слова и числа: «0» не цитата из «35000», «опыт» не цитата из «опытный».
+    match = re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", folded)
+    if not match:
         return ""
-    return haystack[start : start + len(needle)]
+    return haystack[match.start() : match.end()]
 
 
 def excerpt(text: str, start: int, end: int, limit: int = 160) -> str:
