@@ -1,0 +1,149 @@
+import unittest
+
+from tests.helpers import vacancy
+from transparent_vacancy import ai_review, rules
+from transparent_vacancy.llm import AIError, parse_json_object
+from transparent_vacancy.vacancy import Vacancy
+
+PROBLEM = "Из формулировки нельзя понять, как часто и куда придётся ездить."
+ADVICE = "Уточните у работодателя, как часто бывают поездки и кто их оплачивает."
+
+
+def item(**changes) -> dict:
+    data = {
+        "topic": "duties",
+        "type": "ambiguity",
+        "field": "duty",
+        "quote": "возможны командировки",
+        "second_field": "",
+        "second_quote": "",
+        "problem": PROBLEM,
+        "recommendation": ADVICE,
+    }
+    data.update(changes)
+    return data
+
+
+def validate(items, **changes):
+    subject = Vacancy(vacancy(**changes))
+    known, facts = rules.analyze(subject)
+    return ai_review.validate(items, subject, known, facts)
+
+
+DUTY = "Проведение инъекций и забор крови. Возможны командировки. Работа в дружном коллективе."
+
+
+class ValidateTest(unittest.TestCase):
+    def test_finding_with_real_quote_is_accepted_with_source_text(self):
+        (found,) = validate([item()], duty=DUTY)
+        self.assertEqual((found.topic, found.kind, found.field, found.detected_by), ("duties", "ambiguity", "duty", "ai"))
+        self.assertEqual(found.quote, "Возможны командировки")  # как в источнике, а не как написала модель
+        self.assertEqual(found.recommendation, ADVICE)
+
+    def test_invented_quote_is_dropped(self):
+        self.assertEqual(validate([item(quote="удобный график", topic="schedule")], duty=DUTY), [])
+
+    def test_quote_is_found_in_another_field_when_model_names_the_wrong_one(self):
+        (found,) = validate([item(field="requirements")], duty=DUTY)
+        self.assertEqual(found.field, "duty")
+
+    def test_unknown_topic_type_and_gaps_are_dropped(self):
+        self.assertEqual(validate([item(topic="benefits")], duty=DUTY), [])
+        self.assertEqual(validate([item(type="gap", quote="")], duty=DUTY), [])
+        self.assertEqual(validate([item(quote="")], duty=DUTY), [])
+
+    def test_legal_conclusion_is_dropped(self):
+        bad = item(problem="Такая формулировка является нарушением трудового законодательства.")
+        self.assertEqual(validate([bad], duty=DUTY), [])
+
+    def test_recommendation_with_invented_number_or_law_is_replaced(self):
+        for advice in ("Уточните, верно ли, что командировки длятся 14 дней.", "Сошлитесь на ТК РФ и уточните условия."):
+            with self.subTest(advice=advice):
+                (found,) = validate([item(recommendation=advice)], duty=DUTY)
+                self.assertEqual(found.recommendation, ai_review._FALLBACK_RECOMMENDATION["duties"])
+
+    def test_problem_about_a_phrase_absent_from_the_vacancy_is_dropped(self):
+        bad = item(quote="Проведение инъекций", problem="Фраза «удобный график» не конкретизирована и непонятна.")
+        self.assertEqual(validate([bad], duty=DUTY), [])
+
+    def test_truncated_or_foreign_problem_is_dropped(self):
+        self.assertEqual(validate([item(problem="Фраза ")], duty=DUTY), [])
+        self.assertEqual(validate([item(problem="The phrase is vague and unclear for applicants.")], duty=DUTY), [])
+        self.assertEqual(validate([item(problem=PROBLEM + " 不清楚")], duty=DUTY), [])
+
+    def test_vague_phrase_is_not_a_problem_when_topic_is_concrete(self):
+        text = "Проведение инъекций и забор крови. Достойная оплата. Удобный график."
+        salary = item(topic="salary", quote="Достойная оплата")
+        schedule = item(topic="schedule", quote="Удобный график")
+        self.assertEqual(validate([salary, schedule], duty=text, scheduleTypeComment="с 8 до 17, пн-пт"), [])
+
+    def test_ai_does_not_repeat_rules(self):
+        duplicate = item(topic="schedule", quote="Сменная работа", field="schedule")
+        self.assertEqual(validate([duplicate], schedule="Сменная работа", duty=DUTY), [])
+        after_gap = item(topic="employment", quote="Возможны командировки")
+        self.assertEqual(validate([after_gap], employment=None, duty=DUTY), [])
+
+    def test_contradiction_needs_both_values(self):
+        text = "Проведение инъекций. Работа в г. Светлогорске."
+        good = item(
+            topic="location", type="contradiction", field="duty", quote="Работа в г. Светлогорске",
+            second_field="addresses.address[0].location", second_quote="г Калининград, Летняя улица",
+            problem="В описании назван один город, а в адресе места работы другой.",
+        )
+        (found,) = validate([good], duty=text)
+        self.assertEqual(found.kind, "contradiction")
+        self.assertEqual(
+            found.conflict,
+            [
+                {"field": "duty", "value": "Работа в г. Светлогорске"},
+                {"field": "addresses.address[0].location", "value": "г Калининград, Летняя улица"},
+            ],
+        )
+        self.assertEqual(validate([dict(good, second_quote="г Москва")], duty=text), [])
+        self.assertEqual(validate([dict(good, second_field="duty", second_quote="Работа в г. Светлогорске")], duty=text), [])
+
+    def test_limits_and_duplicates(self):
+        text = "Проведение инъекций. Возможны командировки. Иногда работа в выходные. Прочие задачи отдела. Разное."
+        many = [
+            item(),
+            item(),
+            item(quote="Иногда работа в выходные"),
+            item(quote="Прочие задачи отдела"),
+        ]
+        self.assertEqual(len(validate(many, duty=text)), ai_review.MAX_PER_TOPIC)
+
+    def test_garbage_reply_gives_nothing(self):
+        self.assertEqual(validate(None), [])
+        self.assertEqual(validate("нет замечаний"), [])
+        self.assertEqual(validate(["строка", 5, {}]), [])
+
+
+class RequestTest(unittest.TestCase):
+    def test_request_carries_fields_and_known_findings(self):
+        import json
+
+        subject = Vacancy(vacancy(employment=None))
+        known, _ = rules.analyze(subject)
+        request = json.loads(ai_review.build_request(subject, known))
+        self.assertEqual(request["fields"]["job-name"], "Медицинская сестра процедурной")
+        self.assertIn("addresses.address[0].location", request["fields"])
+        self.assertEqual(request["known_findings"], [{"topic": "employment", "type": "gap", "field": "employment"}])
+
+    def test_prompt_has_no_example_phrase_the_model_could_copy(self):
+        self.assertNotIn("удобный график", ai_review.SYSTEM_PROMPT)
+
+
+class ParseTest(unittest.TestCase):
+    def test_json_inside_code_fence_or_prose(self):
+        self.assertEqual(parse_json_object('```json\n{"findings": []}\n```'), {"findings": []})
+        self.assertEqual(parse_json_object('Вот ответ: {"findings": []} Готово.'), {"findings": []})
+
+    def test_not_json(self):
+        with self.assertRaises(AIError):
+            parse_json_object("замечаний нет")
+        with self.assertRaises(AIError):
+            parse_json_object('{"findings": [')
+
+
+if __name__ == "__main__":
+    unittest.main()
