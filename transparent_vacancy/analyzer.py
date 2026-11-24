@@ -94,7 +94,9 @@ def analyze_vacancies(
     cache = cache or Cache(None)
     ai = AIRun(enabled=settings.ai_enabled, base_url=settings.ai_base_url, model=settings.ai_model)
     if settings.ai_enabled and client is None:
-        client = ChatClient(settings.ai_base_url, settings.ai_model, settings.ai_api_key, settings.ai_timeout)
+        client = ChatClient(
+            settings.ai_base_url, settings.ai_model, settings.ai_api_key, settings.ai_timeout, settings.ai_retries
+        )
     signature = (
         f"{settings.ai_model}|{ai_review.PROMPT_VERSION}|{settings.ai_strict}" if settings.ai_enabled else "no-ai"
     )

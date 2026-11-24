@@ -56,6 +56,7 @@ class CliCase(unittest.TestCase):
             TV_AI_BASE_URL=self.model.url + "/v1",
             TV_AI_MODEL="stub",
             TV_AI_WORKERS="1",
+            TV_AI_RETRIES="1",
         )
 
     def call(self, *argv: str) -> tuple[int, str]:

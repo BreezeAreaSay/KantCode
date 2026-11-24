@@ -40,6 +40,7 @@ class EnvFileTest(EnvCase):
         self.assertEqual(load_env_file(self.dir / "absent.env"), {})
         settings = Settings.load(self.dir / "absent.env")
         self.assertEqual((settings.max_vacancies, settings.page_size, settings.schedule), (100, 50, "0 6 * * *"))
+        self.assertEqual((settings.ai_timeout, settings.ai_retries, settings.ai_workers), (180, 3, 2))
         self.assertTrue(settings.ai_enabled and settings.ai_strict)
         self.assertEqual(settings.ai_api_key, "")
 
@@ -72,7 +73,7 @@ class ValuesTest(EnvCase):
         self.assertEqual(self.load(TV_AI_BASE_URL="https://openrouter.ai/api/v1/").ai_base_url, "https://openrouter.ai/api/v1")
 
     def test_numbers_must_be_whole_and_not_below_minimum(self):
-        for name, raw in (("TV_MAX_VACANCIES", "0"), ("TV_PAGE_SIZE", "-5"), ("TV_AI_TIMEOUT", "1.5"), ("TV_AI_MAX_VACANCIES", "-1")):
+        for name, raw in (("TV_MAX_VACANCIES", "0"), ("TV_PAGE_SIZE", "-5"), ("TV_AI_TIMEOUT", "1.5"), ("TV_AI_RETRIES", "0"), ("TV_AI_MAX_VACANCIES", "-1")):
             with self.subTest(name=name, raw=raw):
                 with self.assertRaises(ConfigError) as caught:
                     self.load(**{name: raw})
