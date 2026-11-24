@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-11-24T16:34:14+00:00",
+    "generated_at": "2026-11-24T17:26:27+00:00",
     "tool_version": "1.0.0",
     "mode": "file",
     "source": "examples/kantkod_sample_vacancies.json",
@@ -8,18 +8,19 @@
     "duplicates_merged": 0,
     "vacancies": 10,
     "vacancies_with_findings": 6,
-    "findings_total": 19,
+    "findings_total": 18,
+    "notes_total": 0,
     "findings_by_topic": {
       "duties": 2,
       "location": 6,
       "requirements": 4,
       "salary": 1,
-      "schedule": 4,
+      "schedule": 3,
       "title": 2
     },
     "findings_by_type": {
       "ambiguity": 11,
-      "contradiction": 5,
+      "contradiction": 4,
       "gap": 3
     },
     "ai": {
@@ -31,9 +32,7 @@
         "qwen2.5:7b@http://localhost:11434/v1"
       ],
       "models_checked": {
-        "nvidia/nemotron-3-ultra-550b-a55b:free": "ok",
-        "nvidia/nemotron-3.5-lightning:free": "ok",
-        "qwen2.5:7b@http://localhost:11434/v1": "нет связи с моделью (http://localhost:11434/v1): [Errno 111] Connection refused"
+        "nvidia/nemotron-3-ultra-550b-a55b:free": "ok"
       },
       "models_used": {
         "nvidia/nemotron-3-ultra-550b-a55b:free": 10
@@ -42,7 +41,7 @@
       "vacancies_from_cache": 0,
       "vacancies_failed": 0,
       "vacancies_skipped": 0,
-      "findings": 2,
+      "findings": 1,
       "error": ""
     }
   },
@@ -54,7 +53,8 @@
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
       "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "findings": []
+      "findings": [],
+      "notes": []
     },
     {
       "id": "DEMO-39-002",
@@ -119,7 +119,8 @@
           "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
           "detected_by": "rule"
         }
-      ]
+      ],
+      "notes": []
     },
     {
       "id": "DEMO-39-003",
@@ -182,7 +183,8 @@
           "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
           "detected_by": "rule"
         }
-      ]
+      ],
+      "notes": []
     },
     {
       "id": "DEMO-39-004",
@@ -213,7 +215,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": []
     },
     {
       "id": "DEMO-39-005",
@@ -222,7 +225,8 @@
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
       "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "findings": []
+      "findings": [],
+      "notes": []
     },
     {
       "id": "DEMO-39-006",
@@ -287,7 +291,8 @@
           "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
           "detected_by": "rule"
         }
-      ]
+      ],
+      "notes": []
     },
     {
       "id": "DEMO-39-007",
@@ -296,7 +301,8 @@
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
       "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "findings": []
+      "findings": [],
+      "notes": []
     },
     {
       "id": "DEMO-39-008",
@@ -316,29 +322,9 @@
           "problem": "Расписание названо, но рядом сказано, что возможен гибкий график: неясно, кому и на каких условиях он доступен.",
           "recommendation": "Уточните у работодателя, обязательно ли названное расписание и по каким правилам согласуется гибкий график.",
           "detected_by": "rule"
-        },
-        {
-          "topic": "schedule",
-          "topic_title": "График",
-          "type": "contradiction",
-          "type_title": "Противоречие",
-          "field": "schedule",
-          "quote": "Гибкий график",
-          "problem": "В поле schedule указан «Гибкий график», а в requirement.qualification зафиксирована жёсткая пятидневка с 09:00 до 18:00 — соискатель не поймёт, какой график действительно действует.",
-          "recommendation": "Уточните у работодателя, какой график работы установлен: фиксированный с 09:00 до 18:00 или гибкий, и приведите описание в оба поля к единому виду.",
-          "detected_by": "ai",
-          "conflict": [
-            {
-              "field": "schedule",
-              "value": "Гибкий график"
-            },
-            {
-              "field": "requirement.qualification",
-              "value": "Пятидневная рабочая неделя с 09:00 до 18:00"
-            }
-          ]
         }
-      ]
+      ],
+      "notes": []
     },
     {
       "id": "DEMO-39-009",
@@ -347,7 +333,8 @@
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
       "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-      "findings": []
+      "findings": [],
+      "notes": []
     },
     {
       "id": "DEMO-39-010",
@@ -386,8 +373,8 @@
           "type_title": "Противоречие",
           "field": "requirements",
           "quote": "Опыт разработки учебных материалов",
-          "problem": "В требованиях указано, что нужен опыт разработки учебных материалов, а в поле опыта работы стоит 0 лет.",
-          "recommendation": "Уточните у работодателя, требуется ли опыт работы и если да, то какой минимальный стаж.",
+          "problem": "В требованиях указано, что нужен опыт разработки учебных материалов, а в поле requirement.experience стоит 0 лет — соискатель не поймёт, требуется ли опыт.",
+          "recommendation": "Уточните у работодателя, требуется ли опыт разработки учебных материалов, и если да, то какой минимальный стаж, и скорректируйте значение requirement.experience.",
           "detected_by": "ai",
           "conflict": [
             {
@@ -400,7 +387,8 @@
             }
           ]
         }
-      ]
+      ],
+      "notes": []
     }
   ]
 }
