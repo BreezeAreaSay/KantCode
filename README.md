@@ -8,24 +8,35 @@
 
 ## Для жюри за минуту
 
-**Проверить свой файл** (положите его в каталог `input/` рядом с `docker-compose.yml`):
+Положите свой файл в каталог `input/` рядом с `docker-compose.yml` и выберите,
+откуда сервис возьмёт модель. Отчёт появится в `reports/report.json`.
 
 ```bash
-cp .env.example .env                 # впишите бесплатный ключ OpenRouter в TV_AI_API_KEY
-docker compose run --rm app check /input/ваш_файл.json --out /data/report.json
-# отчёт: reports/report.json
+cp .env.example .env        # в Windows: copy .env.example .env
 ```
+
+| Способ | Что сделать в `.env` | Команда |
+| --- | --- | --- |
+| **А. Бесплатный ключ OpenRouter** (регистрация на openrouter.ai, покупка не нужна) | вписать ключ в `TV_AI_API_KEY=` | `docker compose run --rm app check /input/ваш_файл.json --out /data/report.json` |
+| **Б. Локальная модель в Docker** (ключ не нужен, первый раз скачается около 5 ГБ) | ничего | `docker compose --profile local run --rm app check /input/ваш_файл.json --out /data/report.json` |
+| **В. Ollama уже установлена на машине** (`ollama pull qwen2.5:7b`) | дописать `TV_AI_BASE_URL=http://host.docker.internal:11434/v1` | `docker compose run --rm app check /input/ваш_файл.json --out /data/report.json` |
+
+Какая модель ответила, видно заранее: `docker compose run --rm app models`
+(для способа Б — с `--profile local`). Подробности и видеокарта — в разделе
+[«Запуск в Docker»](#запуск-в-docker).
 
 Без Docker, только Python 3.11+ и без сторонних пакетов:
 
 ```bash
-TV_AI_API_KEY='<ключ>' python -m transparent_vacancy check ваш_файл.json --out report.json
-python -m unittest discover -s tests -t .    # 249 тестов, без сети
+TV_AI_API_KEY='<ключ>' python -m transparent_vacancy check ваш_файл.json --out report.json   # способ А
+python -m transparent_vacancy check ваш_файл.json --out report.json                          # локальная Ollama на этой машине
+python -m unittest discover -s tests -t .                                                    # 253 теста, без сети
 ```
 
 Без ключа и без модели команда всё равно сохранит отчёт: в нём будут замечания
-правил, а в `meta.ai.status` — `unavailable`. Ключ OpenRouter бесплатный,
-покупка не нужна; вместо ключа можно взять локальную модель (раздел [«Запуск в Docker»](#запуск-в-docker)).
+правил, а в `meta.ai.status` — `unavailable`. У бесплатного ключа OpenRouter
+лимит 50 запросов в день: на больший набор сервис сам перейдёт на локальную
+модель, если она запущена, а остальные вакансии получат замечания правил.
 
 | Что | Где |
 | --- | --- |
@@ -111,7 +122,7 @@ python -m transparent_vacancy check examples/kantkod_sample_vacancies.json --out
 
 ## Запуск в Docker
 
-Ничего, кроме Docker, ставить не нужно. Сервису нужна только модель, и способов два.
+Ничего, кроме Docker, ставить не нужно. Сервису нужна только модель, способов три.
 
 **Способ А: токен.** Скопируйте `.env.example` в `.env` и впишите ключ OpenRouter
 в строку `TV_AI_API_KEY=`. Больше ничего менять не нужно.
@@ -131,7 +142,7 @@ docker compose --profile local run --rm app models
 docker compose --profile local run --rm app check /examples/kantkod_sample_vacancies.json --out /data/report.json --require-ai
 ```
 
-Остальные команды одинаковы для обоих способов (для способа Б с `--profile local`):
+Остальные команды одинаковы для всех способов (для способа Б с `--profile local`):
 
 ```bash
 docker compose run --rm app run                                   # рабочий режим один раз
@@ -145,8 +156,19 @@ docker compose run --rm app letters --report /data/report.json    # письма
 - С видеокартой NVIDIA локальная модель считает на ней, если добавить файл
   `docker-compose.gpu.yml`: `docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile local …`.
   Без него Ollama в контейнере считает на процессоре.
-- Если Ollama уже установлена на самой машине, профиль не нужен: впишите в `.env`
-  `TV_AI_BASE_URL=http://host.docker.internal:11434/v1`.
+**Способ В: Ollama уже установлена на машине.** Профиль не нужен, модель второй
+раз не скачивается и считает на видеокарте, если она есть. Ключ оставьте пустым
+и впишите в `.env`:
+
+```
+TV_AI_BASE_URL=http://host.docker.internal:11434/v1
+TV_AI_MODEL=qwen2.5:7b
+```
+
+Команды те же, что в способе А. Если `models` пишет «нет связи с моделью»,
+Ollama принимает запросы только с самой машины: задайте переменную
+`OLLAMA_HOST=0.0.0.0` (в Windows `setx OLLAMA_HOST 0.0.0.0`) и перезапустите Ollama.
+
 - Оба способа работают и вместе: впишите ключ и запускайте с `--profile local`.
   Сервис сначала спросит модели OpenRouter, а когда они упрутся в лимит,
   перейдёт на локальную. Настраивать для этого ничего не нужно.
