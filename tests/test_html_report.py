@@ -29,9 +29,22 @@ class HtmlTest(unittest.TestCase):
         hostile = 'Монтаж</script><script>alert(1)</script><!-- и другие поручения'
         report = self.report(vacancy(job__name=hostile, **NO_TYPE))
         page = render_html(report)
-        self.assertEqual(page.count("</script>"), 2)  # только два своих блока
+        self.assertEqual(page.count("</script>"), 3)  # только три своих блока: отчёт, письма, код страницы
         self.assertNotIn("<script>alert", page)
         self.assertEqual(embedded(page)["vacancies"][0]["job_name"], report["vacancies"][0]["job_name"])
+
+    def test_letters_to_employers_are_on_the_page(self):
+        report = self.report(vacancy(id="clean"), vacancy(id="b", **NO_TYPE))
+        page = render_html(report)
+        letters = json.loads(re.search(r'<script id="letters" type="application/json">(.*?)</script>', page, re.S).group(1))
+        self.assertEqual(len(letters), 2)
+        self.assertIsNone(letters[0])  # у вакансии без замечаний письма нет
+        self.assertIn("Запрос на уточнение условий вакансии «Медицинская сестра процедурной»", letters[1])
+        self.assertIn("1. Тип занятости.", letters[1])
+        self.assertNotIn("**", letters[1])  # для почты, без разметки
+        self.assertNotIn("\n# ", "\n" + letters[1])
+        self.assertIn("Письмо работодателю", page)
+        self.assertIn("Скопировать письмо", page)
 
     def test_page_never_inserts_data_as_markup(self):
         self.assertNotIn("innerHTML", render_html(self.report(vacancy())))
