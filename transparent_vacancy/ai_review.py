@@ -17,9 +17,10 @@ from .rules import GENERIC_VAGUE, Facts
 from .textutil import clean_text, find_quote, fold
 from .vacancy import Vacancy
 
-PROMPT_VERSION = "6"
+PROMPT_VERSION = "7"
 MAX_FIELD_CHARS = 2500
 MAX_QUOTE_CHARS = 200
+MIN_QUOTE_TO_SEARCH = 4  # короче этого цитату в других полях не ищем
 MIN_PROBLEM_CHARS = 25
 MAX_PER_TOPIC = 2
 MAX_FINDINGS = 6
@@ -139,9 +140,10 @@ def _locate(vacancy: Vacancy, field: str, quote: str) -> tuple[str, str] | None:
         return None
     if field.startswith("address") and field not in vacancy.fields and vacancy.location_fields:
         field = vacancy.location_fields[0]
-    candidates = ([field] if field in vacancy.fields else []) + [
-        name for name in vacancy.fields if name != field
-    ]
+    candidates = [field] if field in vacancy.fields else []
+    if len(quote) >= MIN_QUOTE_TO_SEARCH and not quote.isdigit():
+        # Короткую цитату или голое число ищем только в названном поле: в чужом поле совпадёт что угодно.
+        candidates += [name for name in vacancy.fields if name != field]
     for name in candidates:
         found = find_quote(vacancy.fields[name], quote)
         if found:

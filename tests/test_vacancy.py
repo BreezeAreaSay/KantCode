@@ -87,6 +87,13 @@ class MoreShapesTest(unittest.TestCase):
         self.assertIsNone(subject.number("requirement.experience"))  # флаг это не число лет
         self.assertIsNone(Vacancy(vacancy(salary_min="по договорённости")).number("salary_min"))
 
+    def test_zero_salary_bound_is_not_a_value(self):
+        subject = Vacancy(vacancy(salary="", salary_min=35000, salary_max=0))
+        self.assertEqual(subject.get("salary_min"), "35000")
+        self.assertNotIn("salary_max", subject.fields)  # модель не увидит «0» как сумму
+        self.assertNotIn("salary_min", Vacancy(vacancy(salary_min="0", salary_max=0.0)).fields)
+        self.assertEqual(Vacancy(vacancy(requirement={"experience": 0})).get("requirement.experience"), "0")  # а опыт 0 это сведение
+
     def test_repeated_list_values_are_joined_once(self):
         subject = Vacancy(vacancy(shift=["Дневная смена", "Ночная смена", "Дневная смена", ""]))
         self.assertEqual(subject.get("shift"), "Дневная смена, Ночная смена")
@@ -99,6 +106,12 @@ class MoreShapesTest(unittest.TestCase):
 
 
 class TextTest(unittest.TestCase):
+    def test_find_quote_matches_whole_words_and_numbers_only(self):
+        self.assertEqual(find_quote("35000", "0"), "")
+        self.assertEqual(find_quote("Опытный пользователь ПК", "опыт"), "")
+        self.assertEqual(find_quote("Оклад 35000 руб.", "35000"), "35000")
+        self.assertEqual(find_quote("График 2/2, 08:00–20:00.", "2/2, 08:00–20:00"), "2/2, 08:00–20:00")
+
     def test_find_quote_of_nothing(self):
         self.assertEqual(find_quote("Возможны командировки", ""), "")
         self.assertEqual(find_quote("Возможны командировки", " .,;"), "")

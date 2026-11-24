@@ -192,6 +192,19 @@ class ValidateTest(unittest.TestCase):
         self.assertEqual(validate([dict(good, second_quote="г Москва")], duty=text), [])
         self.assertEqual(validate([dict(good, second_field="duty", second_quote="Работа в г. Светлогорске")], duty=text), [])
 
+    def test_zero_salary_bound_cannot_be_a_side_of_a_contradiction(self):
+        claim = item(
+            topic="salary", type="contradiction", field="salary_max", quote="0",
+            second_field="salary_min", second_quote="35000",
+            problem="Минимальная зарплата указана, а максимальная равна нулю, диапазон некорректен.",
+        )
+        self.assertEqual(validate([claim], salary="", salary_min=35000, salary_max=0), [])
+        # и «0» из поля опыта не подставляется вместо отсутствующей границы зарплаты
+        self.assertEqual(
+            validate([claim], salary="", salary_min=35000, salary_max=0, requirement={"education": "Высшее", "experience": 0}),
+            [],
+        )
+
     def test_limits_and_duplicates(self):
         text = "Проведение инъекций. Возможны командировки. Иногда работа в выходные. Прочие задачи отдела. Разное."
         many = [
