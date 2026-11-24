@@ -1,7 +1,12 @@
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from tests.helpers import api_response, vacancy
-from transparent_vacancy.textutil import clean_text, find_quote
+from transparent_vacancy import store
+from transparent_vacancy.store import Cache
+from transparent_vacancy.textutil import clean_text, excerpt, find_quote
 from transparent_vacancy.vacancy import Vacancy, deduplicate, extract_vacancies
 
 
@@ -60,6 +65,94 @@ class DeduplicateTest(unittest.TestCase):
     def test_vacancies_without_id_are_all_kept(self):
         kept, duplicates = deduplicate([Vacancy(vacancy(id=None)), Vacancy(vacancy(id=None))])
         self.assertEqual((len(kept), duplicates), (2, 0))
+
+
+
+class MoreShapesTest(unittest.TestCase):
+    def test_results_as_a_list_and_vacancies_without_results(self):
+        self.assertEqual(len(extract_vacancies({"results": [{"vacancy": vacancy(id="a")}, {"vacancy": vacancy(id="b")}]})), 2)
+        self.assertEqual(len(extract_vacancies({"vacancies": [{"vacancy": vacancy(id="a")}, vacancy(id="b")]})), 2)
+
+    def test_objects_that_are_not_vacancies_are_skipped(self):
+        self.assertEqual(extract_vacancies([{"status": "200"}, "строка", 5, None, {"vacancy": "не объект"}]), [])
+
+    def test_term_as_plain_text(self):
+        subject = Vacancy(vacancy(term="На время отпуска основного работника"))
+        self.assertEqual(subject.get("term.text"), "На время отпуска основного работника")
+        self.assertEqual(Vacancy(vacancy(term={"text": "на 3 месяца"})).get("term.text"), "на 3 месяца")
+
+    def test_numbers_written_as_text(self):
+        subject = Vacancy(vacancy(salary_min="45 000", salary_max="55000,5", requirement={"experience": True}))
+        self.assertEqual((subject.number("salary_min"), subject.number("salary_max")), (45000.0, 55000.5))
+        self.assertIsNone(subject.number("requirement.experience"))  # флаг это не число лет
+        self.assertIsNone(Vacancy(vacancy(salary_min="по договорённости")).number("salary_min"))
+
+    def test_repeated_list_values_are_joined_once(self):
+        subject = Vacancy(vacancy(shift=["Дневная смена", "Ночная смена", "Дневная смена", ""]))
+        self.assertEqual(subject.get("shift"), "Дневная смена, Ночная смена")
+
+    def test_fingerprint_follows_the_content_not_the_key_order(self):
+        first = vacancy()
+        second = dict(reversed(list(first.items())))
+        self.assertEqual(Vacancy(first).fingerprint(), Vacancy(second).fingerprint())
+        self.assertNotEqual(Vacancy(first).fingerprint(), Vacancy(vacancy(duty="Другой текст")).fingerprint())
+
+
+class TextTest(unittest.TestCase):
+    def test_find_quote_of_nothing(self):
+        self.assertEqual(find_quote("Возможны командировки", ""), "")
+        self.assertEqual(find_quote("Возможны командировки", " .,;"), "")
+        self.assertEqual(find_quote("", "командировки"), "")
+
+    def test_excerpt_grows_to_whole_words_and_is_cut_by_the_limit(self):
+        text = "Ведение документации, приём граждан и другие поручения."
+        start = text.index("ругие")
+        self.assertEqual(excerpt(text, start, start + 7), "другие поручения.")
+        long_text = "слово " * 60
+        piece = excerpt(long_text, 0, len(long_text), limit=40)
+        self.assertLessEqual(len(piece), 40)
+        self.assertTrue(piece.endswith("слово"))
+
+    def test_clean_text_of_other_types(self):
+        self.assertEqual([clean_text(None), clean_text(True), clean_text(False), clean_text(12)], ["", "да", "нет", "12"])
+        self.assertEqual(clean_text("Оклад&nbsp;от 45&#160;000\u200b руб."), "Оклад от 45 000 руб.")
+
+
+class CacheTest(unittest.TestCase):
+    def setUp(self):
+        self.dir = Path(self.enterContext(tempfile.TemporaryDirectory()))
+
+    def test_saved_entries_are_read_back(self):
+        cache = Cache(self.dir / "deep" / "cache.json")
+        cache.put("a", {"ai_findings": []})
+        cache.save()
+        self.assertEqual(Cache(self.dir / "deep" / "cache.json").get("a"), {"ai_findings": []})
+        self.assertIsNone(Cache(self.dir / "deep" / "cache.json").get("b"))
+
+    def test_oldest_entries_are_dropped_over_the_limit(self):
+        path = self.dir / "cache.json"
+        cache = Cache(path)
+        with mock.patch.object(store, "CACHE_LIMIT", 2):
+            for key in ("a", "b", "c"):
+                cache.put(key, {"n": key})
+            cache.put("a", {"n": "a2"})  # обновлённая запись становится самой свежей
+            cache.save()
+        self.assertEqual(list(Cache(path).entries), ["c", "a"])
+
+    def test_nothing_is_written_without_changes_or_without_a_path(self):
+        path = self.dir / "cache.json"
+        Cache(path).save()
+        self.assertFalse(path.exists())
+        memory = Cache(None)
+        memory.put("a", {})
+        memory.save()  # кэш без файла живёт только в памяти
+
+    def test_damaged_cache_file_is_treated_as_empty(self):
+        path = self.dir / "cache.json"
+        for text in ("{не json", "[1, 2]", '{"a": "не разбор"}'):
+            with self.subTest(text=text):
+                path.write_text(text, encoding="utf-8")
+                self.assertIsNone(Cache(path).get("a"))
 
 
 if __name__ == "__main__":

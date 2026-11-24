@@ -59,6 +59,16 @@ class DutiesTest(unittest.TestCase):
     def test_too_short(self):
         self.assertEqual(kinds(duty="стирка белья"), [("duties", "ambiguity")])
 
+    def test_reference_to_a_job_description_instead_of_duties(self):
+        (item,) = findings(duty="Работа согласно должностной инструкции медицинской сестры.")
+        self.assertEqual((item.topic, item.kind, item.field), ("duties", "ambiguity", "duty"))
+        self.assertIn("согласно должностной инструкции", item.quote)
+        detailed = (
+            "Выполнение назначений врача, проведение инъекций и забор крови, ведение медицинской документации, "
+            "подготовка кабинета к приёму и другая работа согласно должностной инструкции."
+        )
+        self.assertEqual(kinds(duty=detailed), [])
+
     def test_nothing_but_unnamed_errands(self):
         for duty in ("Выполнение различных поручений руководителя.", "Работа с документами и другие задачи по необходимости."):
             with self.subTest(duty=duty):
@@ -175,6 +185,21 @@ class SalaryTest(unittest.TestCase):
             [],
         )
 
+    def test_amount_in_thousands_is_read_from_text(self):
+        (item,) = findings(duty="Проведение инъекций и забор крови. Заработная плата от 90 тыс. руб.")
+        self.assertEqual((item.topic, item.kind), ("salary", "contradiction"))
+        self.assertEqual(item.conflict[0], {"field": "salary_min, salary_max", "value": "45000–55000"})
+        self.assertIn("90 тыс", item.conflict[1]["value"])
+
+    def test_amount_in_the_next_sentence_is_not_the_salary(self):
+        self.assertEqual(kinds(duty="Проведение инъекций. Оплата труда своевременно. Стоимость медосмотра 90000 рублей."), [])
+
+    def test_one_bound_in_fields_is_not_compared_with_a_plain_amount(self):
+        self.assertEqual(
+            kinds(salary="от 45000", salary_max=0, duty="Проведение инъекций и забор крови. Заработная плата 90000 рублей."),
+            [],
+        )
+
     def test_wide_range_without_explanation(self):
         self.assertEqual(kinds(salary="от 30000", salary_min=30000, salary_max=120000), [("salary", "ambiguity")])
         self.assertEqual(
@@ -227,6 +252,11 @@ class ScheduleTest(unittest.TestCase):
 
     def test_flexible_schedule_field(self):
         self.assertEqual(kinds(schedule="Режим гибкого рабочего времени"), [("schedule", "ambiguity")])
+
+    def test_vague_words_in_text_next_to_a_plain_schedule_field(self):
+        (item,) = findings(duty="Проведение инъекций и забор крови. График работы по согласованию.")
+        self.assertEqual((item.topic, item.kind, item.field), ("schedule", "ambiguity", "duty"))
+        self.assertIn("График работы по согласованию", item.quote)
 
     def test_part_time_without_hours(self):
         self.assertEqual(

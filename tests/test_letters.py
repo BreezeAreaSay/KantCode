@@ -46,6 +46,11 @@ class LetterTest(unittest.TestCase):
         for number in re.findall(r"\d{2,}", body):
             self.assertIn(number, source)
 
+    def test_advice_in_an_unknown_form_is_kept_as_written(self):
+        (entry,) = entries(vacancy(employment=None))
+        entry["findings"][0]["recommendation"] = "Проверьте, верно ли указан тип занятости."
+        self.assertIn("Проверьте, верно ли указан тип занятости.", build_letter(entry))
+
     def test_file_names(self):
         letters = build_letters({"vacancies": entries(vacancy(id="a/b:1", employment=None), vacancy(id=None, employment=None), vacancy(id="ok"))})
         self.assertEqual(sorted(letters), ["a_b_1.md", "vacancy-2.md"])
