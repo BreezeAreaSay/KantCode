@@ -34,6 +34,9 @@ python -m transparent_vacancy html --report report.json      # открыть re
 Какая модель отвечает, видно заранее: `docker compose run --rm app models`
 (для способа Б — с `--profile local`).
 
+Если Docker не скачивает образ (Docker Hub недоступен из вашей сети), используйте
+команды без Docker ниже: результат тот же, нужен только Python.
+
 **Без Docker.** Ключ для способа А впишите в тот же файл `.env` или задайте в
 терминале: `$env:TV_AI_API_KEY="<ключ>"` в PowerShell, `export TV_AI_API_KEY='<ключ>'`
 в Linux и macOS. Без ключа сервис обращается к Ollama на этой машине.
