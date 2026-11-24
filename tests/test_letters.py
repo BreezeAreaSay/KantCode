@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from tests.helpers import vacancy
+from tests.helpers import NO_TYPE, vacancy
 from tests.test_cli import CliCase
 from transparent_vacancy.analyzer import analyze_vacancies
 from transparent_vacancy.config import Settings
@@ -47,7 +47,7 @@ class LetterTest(unittest.TestCase):
             self.assertIn(number, source)
 
     def test_advice_written_by_the_model_is_addressed_to_the_employer_too(self):
-        (entry,) = entries(vacancy(employment=None))
+        (entry,) = entries(vacancy(**NO_TYPE))
         for advice in ("Уточнить у работодателя, какой график обязателен.", "Уточните у работодателя какой график обязателен."):
             with self.subTest(advice=advice):
                 entry["findings"][0]["recommendation"] = advice
@@ -56,12 +56,12 @@ class LetterTest(unittest.TestCase):
                 self.assertNotIn("у работодателя", text)
 
     def test_advice_in_an_unknown_form_is_kept_as_written(self):
-        (entry,) = entries(vacancy(employment=None))
+        (entry,) = entries(vacancy(**NO_TYPE))
         entry["findings"][0]["recommendation"] = "Проверьте, верно ли указан тип занятости."
         self.assertIn("Проверьте, верно ли указан тип занятости.", build_letter(entry))
 
     def test_file_names(self):
-        letters = build_letters({"vacancies": entries(vacancy(id="a/b:1", employment=None), vacancy(id=None, employment=None), vacancy(id="ok"))})
+        letters = build_letters({"vacancies": entries(vacancy(id="a/b:1", **NO_TYPE), vacancy(id=None, **NO_TYPE), vacancy(id="ok"))})
         self.assertEqual(sorted(letters), ["a_b_1.md", "vacancy-2.md"])
 
 

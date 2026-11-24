@@ -133,7 +133,10 @@ _OTHER_DUTIES = re.compile(
     r"|(?:и\s+)?(?:друг\w+|ины[ехм]и?|проч\w+)\s+задач\w*"
     r"|выполнени\w+\s+(?:ин\w+|друг\w+|проч\w+|разов\w+|различн\w+|разн\w+)\s+поручени\w+"
     r"|(?:различн\w+|разн\w+)\s+поручени\w+)"
-    r"(?:\s+руководител\w+)?(?:\s+по\s+(?:мере\s+)?необходимости)?",
+    r"(?:\s+руководител\w+)?(?:\s+по\s+(?:мере\s+)?необходимости)?"
+    # Перечень открыт, только если фраза закрывает его: «…и другие задачи.», а не «…экономических
+    # и других задач разрабатывает программы». Рамки, названные сразу после, его закрывают.
+    r"(?=\s*(?:[.;!]|$|,(?!\s*(?:непосредственно\s+)?(?:связанн|предусмотренн|вытекающ|относящ|в\s+рамках|в\s+пределах|по\s+профил))))",
     I,
 )
 _MIN_DUTY_CHARS = 25  # короче этого описание обязанностей ни о чём не говорит
@@ -169,7 +172,8 @@ def check_duties(vacancy: Vacancy) -> list[Finding]:
             )
         ]
     match = _BY_INSTRUCTION.search(duty)
-    if match and len(duty) < 120:
+    rest = (duty[: match.start()] + duty[match.end() :]) if match else ""
+    if match and len(re.sub(r"[^\w]+", " ", rest).strip()) < 40:  # кроме ссылки на инструкцию, сказано мало
         return [
             Finding(
                 "duties",
@@ -234,6 +238,12 @@ _CONCRETE_REQUIREMENT = re.compile(
     r"|обучени\w+|курс\w+|компьютер\w*|\bпк\b|программ\w+|язык\w*|\bречь\w*|грамотн\w+|интернет\w*",
     I,
 )
+# Работодатель сам говорит, что обучит или что опыт не нужен: особого образования не ждут.
+_TRAINING_OFFERED = re.compile(
+    r"\bобучим\b|\bнаучим\b|обучени\w+\s+(?:за\s+сч[её]т|предоставля\w+|на\s+рабочем\s+месте)|без\s+опыта"
+    r"|опыт\w*(?:\s+работы)?\s*:?\s*(?:не\s+требуется|не\s+обязателен|необязателен)",
+    I,
+)
 _NO_EDUCATION_NEEDED = ("ребования не предъявляются", "общее образование")
 _REQUIREMENT_TEXTS = ("requirements", "qualification", "requirement.qualification")
 
@@ -274,7 +284,12 @@ def check_requirements(vacancy: Vacancy) -> list[Finding]:
 
     # Незаполненное образование само по себе не замечание: если требования названы по существу
     # (знания, навыки, документы), соискателю понятно, чего от него ждут.
-    if not education and not _EDUCATION_WORDS.search(everything) and not _names_concrete_requirement(texts):
+    if (
+        not education
+        and not _EDUCATION_WORDS.search(everything)
+        and not _names_concrete_requirement(texts)
+        and not _TRAINING_OFFERED.search(everything)
+    ):
         if texts:
             problem = (
                 "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня "
@@ -553,6 +568,14 @@ _SHIFT_WORK = re.compile(
     r"|посменн\w+|сутки\s*(?:через|/)\s*\w+|(?<![\d/,.])[1-4]\s*/\s*[1-4](?![\d/]|\s*ставк)|вахтов\w+\s+метод\w*",
     I,
 )
+# Для противоречия с «полным рабочим днём» берём только прямо названный сменный режим.
+# Голое «2/2» и перечень «5/2, 2/2» — это варианты графика, а не спор с полем.
+_SHIFT_CLASH = re.compile(
+    r"сменн\w+\s+(?:график\w*|режим\w*|работ\w+)|(?:график|режим)\w*\s+(?:работы\s*)?[:—–-]?\s*сменн\w+"
+    r"|посменн\w+|сутки\s*(?:через|/)\s*\w+|вахтов\w+\s+метод\w*",
+    I,
+)
+_FIVE_DAY = re.compile(r"(?<![\d/])5\s*/\s*2(?![\d/])|пятидневн\w+|\b5\s*-?\s*(?:ти\s*)?дневн\w+", I)
 _VAGUE_SCHEDULE = re.compile(
     r"(?:гибк\w+|свободн\w+|удобн\w+|плавающ\w+|скользящ\w+|индивидуальн\w+)\s+график\w*"
     r"|график\w*\s+(?:работы\s+)?(?:по\s+(?:договор[её]нности|согласованию)|обсуждается|гибк\w+|свободн\w+|плавающ\w+)"
@@ -599,8 +622,8 @@ def check_schedule(vacancy: Vacancy, facts: Facts) -> list[Finding]:
 
     findings: list[Finding] = []
     if "полный рабочий день" in kind and "неполн" not in kind and not shift:
-        clash = _search(vacancy, _SHIFT_WORK)
-        if clash:
+        clash = _search(vacancy, _SHIFT_CLASH)
+        if clash and not _search(vacancy, _FIVE_DAY):
             name, quote = clash
             findings.append(
                 Finding(
@@ -816,6 +839,11 @@ def check_employment(vacancy: Vacancy, facts: Facts) -> list[Finding]:
         if _search(vacancy, _EMPLOYMENT_WORDS):
             facts.employment_concrete = True
             return []
+        if "рабочий день" in fold(schedule) or "рабочая неделя" in fold(schedule):
+            # Поле графика уже говорит, полный это день или неполный: по занятости соискателю всё ясно.
+            # Портал часто не отдаёт поле занятости вовсе (в 4 из 10 вакансий), такой пропуск не замечание.
+            facts.employment_concrete = True
+            return []
         return [
             Finding(
                 "employment",
@@ -898,7 +926,7 @@ _POSSIBLE = re.compile(
 )
 _TOPIC_WORDS = (
     ("location", re.compile(r"адрес\w*|мест\w+\s+работы|рабоч\w+\s+мест\w+|формат\w*|удал[её]нн\w+|дистанционн\w+|офис\w*", I)),
-    ("schedule", re.compile(r"график\w*|режим\w*|смен\w+|выходн\w+|час\w+\s+работы|рабоч\w+\s+врем\w+", I)),
+    ("schedule", re.compile(r"график\w*|режим\w*|смен\w+|выходн\w+|час\w+\s+работы|рабоч\w+\s+врем\w+|нагрузк\w+", I)),
     ("salary", re.compile(r"оплат\w+|зарплат\w+|заработн\w+|оклад\w*|доход\w*|преми\w+", I)),
     ("requirements", re.compile(r"требовани\w+|опыт\w*|знани\w+|навык\w*|образовани\w+|квалификац\w+", I)),
     ("duties", re.compile(r"обязанност\w+|задач\w*|функци\w+|поручени\w+", I)),
