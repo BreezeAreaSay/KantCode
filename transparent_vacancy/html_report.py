@@ -73,6 +73,8 @@ _PAGE = """<!doctype html>
   .letter pre { margin: 0; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .letter .actions { margin: 0; padding: 0 14px 12px; align-items: center; }
   .copied { color: var(--ok); font-size: 13px; }
+  .note { margin: 10px 0 0; font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 10px; }
+  .note b { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -212,6 +214,14 @@ function render() {
     card.append(meta);
     if (!vacancy.findings.length) card.append(el("p", "clean", "Замечаний нет."));
     for (const finding of visible) card.append(findingNode(finding));
+    if (!state.type && !state.source) {  // пометки не замечания: показываем только без фильтров по виду
+      for (const note of vacancy.notes || []) {
+        if (state.topic && note.topic !== state.topic) continue;
+        const line = el("p", "note");
+        line.append(el("b", "", "Пометка. "), document.createTextNode(note.problem + " " + note.recommendation));
+        card.append(line);
+      }
+    }
     const letter = letters[position];
     if (letter) {
       const box = letterNode(letter);

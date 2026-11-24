@@ -448,8 +448,14 @@ class WordingRulesTest(unittest.TestCase):
 class EmploymentTest(unittest.TestCase):
     def test_missing_type_is_gap_unless_text_says_it(self):
         self.assertEqual(kinds(**NO_TYPE), [("employment", "gap")])
-        # поле графика «полный/неполный рабочий день» уже говорит о занятости: портал часто не отдаёт её поле
+        # поле графика «полный/неполный рабочий день» уже говорит о занятости: портал часто не отдаёт её поле,
+        # поэтому это не замечание, а пометка вне findings
         self.assertEqual(kinds(employment=None), [])
+        findings_, facts = rules.analyze(Vacancy(vacancy(employment=None)))
+        (note,) = facts.notes
+        self.assertEqual((note.topic, note.kind, note.field, note.quote), ("employment", "note", "employment", ""))
+        self.assertIn("«Полный рабочий день»", note.problem)
+        self.assertEqual(rules.analyze(Vacancy(vacancy()))[1].notes, [])
         self.assertEqual(kinds(employment=None, schedule="Режим гибкого рабочего времени", scheduleTypeComment="08.00 - 17.00 ПН-ПТ"), [("employment", "gap")])
         self.assertEqual(kinds(**NO_TYPE, duty="Проведение инъекций и забор крови. Полная занятость."), [])
 

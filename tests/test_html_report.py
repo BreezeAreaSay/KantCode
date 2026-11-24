@@ -33,6 +33,15 @@ class HtmlTest(unittest.TestCase):
         self.assertNotIn("<script>alert", page)
         self.assertEqual(embedded(page)["vacancies"][0]["job_name"], report["vacancies"][0]["job_name"])
 
+    def test_notes_are_kept_apart_from_findings(self):
+        report = self.report(vacancy(id="a", employment=None))
+        (entry,) = report["vacancies"]
+        self.assertEqual(entry["findings"], [])
+        self.assertEqual([(note["type"], note["type_title"]) for note in entry["notes"]], [("note", "Пометка")])
+        self.assertEqual((report["meta"]["findings_total"], report["meta"]["notes_total"]), (0, 1))
+        self.assertEqual(report["meta"]["vacancies_with_findings"], 0)
+        self.assertIn("Пометка. ", render_html(report))
+
     def test_letters_to_employers_are_on_the_page(self):
         report = self.report(vacancy(id="clean"), vacancy(id="b", **NO_TYPE))
         page = render_html(report)
