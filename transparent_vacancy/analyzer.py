@@ -135,7 +135,7 @@ def analyze_vacancies(
             if probed[0] or not hasattr(client, "probe"):
                 return
             probed[0] = True
-            results = client.probe()
+            results = client.probe(first_only=True)
             for label, state in results:
                 ai.models_checked[label] = state
                 log(f"ИИ: проверка модели {label}: {'отвечает' if state == 'ok' else 'не отвечает — ' + state[:160]}")
