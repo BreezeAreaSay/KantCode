@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generated_at": "2026-11-24T15:52:23+00:00",
+    "generated_at": "2026-11-24T16:34:14+00:00",
     "tool_version": "1.0.0",
     "mode": "file",
     "source": "examples/kantkod_sample_vacancies.json",
@@ -8,24 +8,36 @@
     "duplicates_merged": 0,
     "vacancies": 10,
     "vacancies_with_findings": 6,
-    "findings_total": 17,
+    "findings_total": 19,
     "findings_by_topic": {
       "duties": 2,
-      "location": 5,
+      "location": 6,
       "requirements": 4,
       "salary": 1,
-      "schedule": 3,
+      "schedule": 4,
       "title": 2
     },
     "findings_by_type": {
-      "ambiguity": 10,
-      "contradiction": 4,
+      "ambiguity": 11,
+      "contradiction": 5,
       "gap": 3
     },
     "ai": {
       "status": "ok",
       "base_url": "https://openrouter.ai/api/v1",
       "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "fallback_models": [
+        "nvidia/nemotron-3.5-lightning:free",
+        "qwen2.5:7b@http://localhost:11434/v1"
+      ],
+      "models_checked": {
+        "nvidia/nemotron-3-ultra-550b-a55b:free": "ok",
+        "nvidia/nemotron-3.5-lightning:free": "ok",
+        "qwen2.5:7b@http://localhost:11434/v1": "нет связи с моделью (http://localhost:11434/v1): [Errno 111] Connection refused"
+      },
+      "models_used": {
+        "nvidia/nemotron-3-ultra-550b-a55b:free": 10
+      },
       "vacancies_reviewed": 10,
       "vacancies_from_cache": 0,
       "vacancies_failed": 0,
@@ -41,6 +53,7 @@
       "job_name": "Специалист по документообороту",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": []
     },
     {
@@ -49,6 +62,7 @@
       "job_name": "Помощник администратора",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
         {
           "topic": "duties",
@@ -113,7 +127,29 @@
       "job_name": "Младший аналитик данных",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
+        {
+          "topic": "title",
+          "topic_title": "Название должности",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "job-name",
+          "quote": "Младший аналитик данных",
+          "problem": "Название должности говорит о начальном уровне, а в требованиях назван опыт от 5 лет.",
+          "recommendation": "Уточните у работодателя, на какой уровень открыта вакансия, и приведите название и требования к одному варианту.",
+          "detected_by": "rule",
+          "conflict": [
+            {
+              "field": "job-name",
+              "value": "Младший аналитик данных"
+            },
+            {
+              "field": "requirement.qualification",
+              "value": "не менее 5 лет опыта"
+            }
+          ]
+        },
         {
           "topic": "requirements",
           "topic_title": "Требования",
@@ -145,27 +181,6 @@
           "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.",
           "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
           "detected_by": "rule"
-        },
-        {
-          "topic": "title",
-          "topic_title": "Название должности",
-          "type": "contradiction",
-          "type_title": "Противоречие",
-          "field": "job-name",
-          "quote": "Младший аналитик данных",
-          "problem": "Название должности «Младший аналитик данных» противоречит требованию о 5-летнем опыте работы.",
-          "recommendation": "Уточните у работодателя, соответствует ли должность уровню «младший» или требуется опытный аналитик, и скорректируйте название или требования.",
-          "detected_by": "ai",
-          "conflict": [
-            {
-              "field": "job-name",
-              "value": "Младший аналитик данных"
-            },
-            {
-              "field": "requirement.qualification",
-              "value": "Требуется не менее 5 лет опыта работы аналитиком данных"
-            }
-          ]
         }
       ]
     },
@@ -175,6 +190,7 @@
       "job_name": "Оператор контактного центра",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
         {
           "topic": "location",
@@ -205,6 +221,7 @@
       "job_name": "Библиотекарь",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": []
     },
     {
@@ -213,6 +230,7 @@
       "job_name": "Специалист",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
         {
           "topic": "title",
@@ -277,6 +295,7 @@
       "job_name": "Инженер технической поддержки",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": []
     },
     {
@@ -285,6 +304,7 @@
       "job_name": "Координатор проектов",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
         {
           "topic": "schedule",
@@ -296,6 +316,27 @@
           "problem": "Расписание названо, но рядом сказано, что возможен гибкий график: неясно, кому и на каких условиях он доступен.",
           "recommendation": "Уточните у работодателя, обязательно ли названное расписание и по каким правилам согласуется гибкий график.",
           "detected_by": "rule"
+        },
+        {
+          "topic": "schedule",
+          "topic_title": "График",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "schedule",
+          "quote": "Гибкий график",
+          "problem": "В поле schedule указан «Гибкий график», а в requirement.qualification зафиксирована жёсткая пятидневка с 09:00 до 18:00 — соискатель не поймёт, какой график действительно действует.",
+          "recommendation": "Уточните у работодателя, какой график работы установлен: фиксированный с 09:00 до 18:00 или гибкий, и приведите описание в оба поля к единому виду.",
+          "detected_by": "ai",
+          "conflict": [
+            {
+              "field": "schedule",
+              "value": "Гибкий график"
+            },
+            {
+              "field": "requirement.qualification",
+              "value": "Пятидневная рабочая неделя с 09:00 до 18:00"
+            }
+          ]
         }
       ]
     },
@@ -305,6 +346,7 @@
       "job_name": "Оператор ввода данных",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": []
     },
     {
@@ -313,6 +355,7 @@
       "job_name": "Методист образовательных программ",
       "company": "Учебная организация «Балтика»",
       "ai_reviewed": true,
+      "ai_model": "nvidia/nemotron-3-ultra-550b-a55b:free",
       "findings": [
         {
           "topic": "location",
@@ -326,14 +369,25 @@
           "detected_by": "rule"
         },
         {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "requirement.qualification",
+          "quote": "Формат и адрес рабочего места уточняются при собеседовании",
+          "problem": "Условие не названо, а отложено до собеседования или договорённости: из вакансии его не узнать.",
+          "recommendation": "Уточните у работодателя, где выполняется работа: адрес и можно ли работать удалённо, и впишите это в вакансию.",
+          "detected_by": "rule"
+        },
+        {
           "topic": "requirements",
           "topic_title": "Требования",
           "type": "contradiction",
           "type_title": "Противоречие",
           "field": "requirements",
           "quote": "Опыт разработки учебных материалов",
-          "problem": "В тексте требований указано, что нужен опыт разработки учебных материалов, а в поле опыта работы стоит «0», что может означать отсутствие требований к стажу.",
-          "recommendation": "Уточните у работодателя, требуется ли опыт разработки учебных материалов и если да, то какой минимальный стаж работы.",
+          "problem": "В требованиях указано, что нужен опыт разработки учебных материалов, а в поле опыта работы стоит 0 лет.",
+          "recommendation": "Уточните у работодателя, требуется ли опыт работы и если да, то какой минимальный стаж.",
           "detected_by": "ai",
           "conflict": [
             {
