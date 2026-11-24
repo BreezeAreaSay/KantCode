@@ -1,0 +1,352 @@
+{
+  "meta": {
+    "generated_at": "2026-11-24T15:52:23+00:00",
+    "tool_version": "1.0.0",
+    "mode": "file",
+    "source": "examples/kantkod_sample_vacancies.json",
+    "vacancies_received": 10,
+    "duplicates_merged": 0,
+    "vacancies": 10,
+    "vacancies_with_findings": 6,
+    "findings_total": 17,
+    "findings_by_topic": {
+      "duties": 2,
+      "location": 5,
+      "requirements": 4,
+      "salary": 1,
+      "schedule": 3,
+      "title": 2
+    },
+    "findings_by_type": {
+      "ambiguity": 10,
+      "contradiction": 4,
+      "gap": 3
+    },
+    "ai": {
+      "status": "ok",
+      "base_url": "https://openrouter.ai/api/v1",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "vacancies_reviewed": 10,
+      "vacancies_from_cache": 0,
+      "vacancies_failed": 0,
+      "vacancies_skipped": 0,
+      "findings": 2,
+      "error": ""
+    }
+  },
+  "vacancies": [
+    {
+      "id": "DEMO-39-001",
+      "url": null,
+      "job_name": "Специалист по документообороту",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": []
+    },
+    {
+      "id": "DEMO-39-002",
+      "url": null,
+      "job_name": "Помощник администратора",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "duties",
+          "topic_title": "Обязанности",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "duty",
+          "quote": "Выполнение различных поручений руководителя.",
+          "problem": "Обязанности описаны общими словами: не названа ни одна конкретная задача.",
+          "recommendation": "Попросите работодателя перечислить конкретные задачи и участок работы.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "requirements",
+          "topic_title": "Требования",
+          "type": "gap",
+          "type_title": "Пропуск",
+          "field": "requirement.education",
+          "quote": "",
+          "problem": "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня образования, ни конкретных знаний и навыков.",
+          "recommendation": "Уточните у работодателя требуемый уровень образования и обязательные знания или навыки либо отметьте, что требований к образованию нет.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "salary",
+          "topic_title": "Оплата",
+          "type": "gap",
+          "type_title": "Пропуск",
+          "field": "salary",
+          "quote": "",
+          "problem": "Размер оплаты не указан ни в полях зарплаты, ни в описании.",
+          "recommendation": "Попросите работодателя указать размер оплаты: сумму или вилку в рублях.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "schedule",
+          "topic_title": "График",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "schedule",
+          "quote": "Гибкий график",
+          "problem": "Формулировка о графике не называет рабочие дни и часы, а конкретного расписания нет ни в одном поле.",
+          "recommendation": "Уточните у работодателя рабочие дни, время начала и окончания работы и то, кто и как согласует график.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "addresses.address[0].location",
+          "quote": "г. Калининград",
+          "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.",
+          "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
+          "detected_by": "rule"
+        }
+      ]
+    },
+    {
+      "id": "DEMO-39-003",
+      "url": null,
+      "job_name": "Младший аналитик данных",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "requirements",
+          "topic_title": "Требования",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "requirement.experience",
+          "quote": "0",
+          "problem": "Требуемый опыт указан по-разному: в поле опыта 0 (лет), в тексте — от 5.",
+          "recommendation": "Уточните у работодателя, какой опыт работы действительно обязателен, и приведите оба места к одному значению.",
+          "detected_by": "rule",
+          "conflict": [
+            {
+              "field": "requirement.experience",
+              "value": "0"
+            },
+            {
+              "field": "requirement.qualification",
+              "value": "не менее 5 лет опыта"
+            }
+          ]
+        },
+        {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "addresses.address[0].location",
+          "quote": "г. Черняховск",
+          "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.",
+          "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "title",
+          "topic_title": "Название должности",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "job-name",
+          "quote": "Младший аналитик данных",
+          "problem": "Название должности «Младший аналитик данных» противоречит требованию о 5-летнем опыте работы.",
+          "recommendation": "Уточните у работодателя, соответствует ли должность уровню «младший» или требуется опытный аналитик, и скорректируйте название или требования.",
+          "detected_by": "ai",
+          "conflict": [
+            {
+              "field": "job-name",
+              "value": "Младший аналитик данных"
+            },
+            {
+              "field": "requirement.qualification",
+              "value": "Требуется не менее 5 лет опыта работы аналитиком данных"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DEMO-39-004",
+      "url": null,
+      "job_name": "Оператор контактного центра",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "duty",
+          "quote": "полностью дистанционная",
+          "problem": "Место работы указано по-разному: в одном месте работа полностью дистанционная, в другом обязательно присутствие в офисе.",
+          "recommendation": "Уточните у работодателя, где выполняется работа: дистанционно или в офисе, и приведите описание к одному варианту.",
+          "detected_by": "rule",
+          "conflict": [
+            {
+              "field": "duty",
+              "value": "полностью дистанционная"
+            },
+            {
+              "field": "requirement.qualification",
+              "value": "Обязательное ежедневное присутствие в офисе"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "DEMO-39-005",
+      "url": null,
+      "job_name": "Библиотекарь",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": []
+    },
+    {
+      "id": "DEMO-39-006",
+      "url": null,
+      "job_name": "Специалист",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "title",
+          "topic_title": "Название должности",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "job-name",
+          "quote": "Специалист",
+          "problem": "Название должности общее: по нему нельзя понять направление работы и подразделение.",
+          "recommendation": "Уточните у работодателя полное название должности с направлением или участком работы.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "duties",
+          "topic_title": "Обязанности",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "duty",
+          "quote": "Работа с документами и другие задачи по необходимости.",
+          "problem": "Обязанности описаны общими словами: не названа ни одна конкретная задача.",
+          "recommendation": "Попросите работодателя перечислить конкретные задачи и участок работы.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "requirements",
+          "topic_title": "Требования",
+          "type": "gap",
+          "type_title": "Пропуск",
+          "field": "requirement.education",
+          "quote": "",
+          "problem": "Требования названы общими словами: поле образования не заполнено, а в тексте нет ни уровня образования, ни конкретных знаний и навыков.",
+          "recommendation": "Уточните у работодателя требуемый уровень образования и обязательные знания или навыки либо отметьте, что требований к образованию нет.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "schedule",
+          "topic_title": "График",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "schedule",
+          "quote": "Сменный график",
+          "problem": "Указан сменный режим, но конкретного расписания нет ни в полях, ни в описании: неизвестны длительность смен и порядок чередования.",
+          "recommendation": "Уточните у работодателя длительность смены, время начала и окончания и порядок чередования рабочих и выходных дней.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "addresses.address[0].location",
+          "quote": "Калининградская область",
+          "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.",
+          "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
+          "detected_by": "rule"
+        }
+      ]
+    },
+    {
+      "id": "DEMO-39-007",
+      "url": null,
+      "job_name": "Инженер технической поддержки",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": []
+    },
+    {
+      "id": "DEMO-39-008",
+      "url": null,
+      "job_name": "Координатор проектов",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "schedule",
+          "topic_title": "График",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "requirement.qualification",
+          "quote": "Возможен гибкий график",
+          "problem": "Расписание названо, но рядом сказано, что возможен гибкий график: неясно, кому и на каких условиях он доступен.",
+          "recommendation": "Уточните у работодателя, обязательно ли названное расписание и по каким правилам согласуется гибкий график.",
+          "detected_by": "rule"
+        }
+      ]
+    },
+    {
+      "id": "DEMO-39-009",
+      "url": null,
+      "job_name": "Оператор ввода данных",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": []
+    },
+    {
+      "id": "DEMO-39-010",
+      "url": null,
+      "job_name": "Методист образовательных программ",
+      "company": "Учебная организация «Балтика»",
+      "ai_reviewed": true,
+      "findings": [
+        {
+          "topic": "location",
+          "topic_title": "Место работы",
+          "type": "ambiguity",
+          "type_title": "Неоднозначность",
+          "field": "addresses.address[0].location",
+          "quote": "г. Калининград",
+          "problem": "Адрес места работы неполный: назван только населённый пункт или регион, без улицы и дома.",
+          "recommendation": "Уточните у работодателя точный адрес места работы: улицу и номер дома.",
+          "detected_by": "rule"
+        },
+        {
+          "topic": "requirements",
+          "topic_title": "Требования",
+          "type": "contradiction",
+          "type_title": "Противоречие",
+          "field": "requirements",
+          "quote": "Опыт разработки учебных материалов",
+          "problem": "В тексте требований указано, что нужен опыт разработки учебных материалов, а в поле опыта работы стоит «0», что может означать отсутствие требований к стажу.",
+          "recommendation": "Уточните у работодателя, требуется ли опыт разработки учебных материалов и если да, то какой минимальный стаж работы.",
+          "detected_by": "ai",
+          "conflict": [
+            {
+              "field": "requirements",
+              "value": "Опыт разработки учебных материалов"
+            },
+            {
+              "field": "requirement.experience",
+              "value": "0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
