@@ -1,6 +1,6 @@
 import unittest
 
-from tests.helpers import vacancy
+from tests.helpers import NO_TYPE, vacancy
 from transparent_vacancy import ai_review, rules
 from transparent_vacancy.llm import AIError, parse_json_object
 from transparent_vacancy.vacancy import Vacancy
@@ -87,7 +87,7 @@ class ValidateTest(unittest.TestCase):
         duplicate = item(quote="другие поручения руководителя")
         self.assertEqual(validate([duplicate], duty=text), [])
         after_gap = item(topic="employment", quote="Возможны подмены")
-        self.assertEqual(validate([after_gap], employment=None, duty=DUTY), [])
+        self.assertEqual(validate([after_gap], **NO_TYPE, duty=DUTY), [])
 
     def test_ai_may_add_another_place_on_a_topic_the_rules_touched(self):
         text = "Ведение документации и другие поручения руководителя. Возможны подмены."
@@ -143,7 +143,7 @@ class ValidateTest(unittest.TestCase):
         changes = dict(
             duty="Проведение инъекций. Возможны подмены. Приём граждан в г. Светлогорске.",
             addresses={"address": [{"location": "Калининградская область, г Калининград"}]},
-            employment=None,
+            **NO_TYPE,
         )
         clash = item(
             topic="location", type="contradiction", field="duty", quote="Приём граждан в г. Светлогорске",
@@ -225,7 +225,7 @@ class RequestTest(unittest.TestCase):
     def test_request_carries_fields_and_known_findings(self):
         import json
 
-        subject = Vacancy(vacancy(employment=None))
+        subject = Vacancy(vacancy(**NO_TYPE))
         known, _ = rules.analyze(subject)
         request = json.loads(ai_review.build_request(subject, known))
         self.assertEqual(request["fields"]["job-name"], "Медицинская сестра процедурной")

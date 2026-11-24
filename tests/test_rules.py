@@ -1,6 +1,6 @@
 import unittest
 
-from tests.helpers import vacancy
+from tests.helpers import NO_TYPE, vacancy
 from transparent_vacancy import rules
 from transparent_vacancy.vacancy import Vacancy
 
@@ -33,7 +33,7 @@ class CleanVacancyTest(unittest.TestCase):
         )
 
     def test_gap_has_empty_quote_and_names_the_field(self):
-        (item,) = findings(employment=None)
+        (item,) = findings(**NO_TYPE)
         self.assertEqual((item.field, item.quote, item.kind), ("employment", "", "gap"))
         self.assertTrue(item.problem and item.recommendation)
 
@@ -75,6 +75,24 @@ class DutiesTest(unittest.TestCase):
 
     def test_too_short(self):
         self.assertEqual(kinds(duty="стирка белья"), [("duties", "ambiguity")])
+
+    def test_open_list_only_when_it_closes_the_list(self):
+        self.assertEqual(
+            kinds(duty="На основе анализа моделей и алгоритмов решения экономических и других задач разрабатывает программы."),
+            [],
+        )
+        self.assertEqual(
+            kinds(duty="Планирование работы отдела, контроль сроков. Осуществление иных функций, непосредственно связанных с задачами отдела."),
+            [],
+        )
+        (item,) = findings(duty="Ведение документации, приём граждан, а также иные поручения, если потребуется.")
+        self.assertIn("иные поручения", item.quote)
+
+    def test_reference_to_a_job_description_next_to_real_duties_is_fine(self):
+        self.assertEqual(
+            kinds(duty="Выполнение работы в соответствии с должностными обязанностями. Перевозка пассажиров по регулярным маршрутам города."),
+            [],
+        )
 
     def test_reference_to_a_job_description_instead_of_duties(self):
         (item,) = findings(duty="Работа согласно должностной инструкции медицинской сестры.")
@@ -150,6 +168,17 @@ class RequirementsTest(unittest.TestCase):
                 (item,) = findings(requirement={"education": "Не указано", "experience": 0}, requirements=text)
                 self.assertEqual((item.topic, item.kind, item.field, item.quote), ("requirements", "gap", "requirement.education", ""))
                 self.assertIn("общими словами", item.problem)
+
+    def test_unfilled_education_is_fine_when_the_employer_trains(self):
+        for duty in ("Выпечка хлеба из полуфабрикатов. Остальному научим!", "Выкладка товара. Опыт работы не требуется, мы обучим."):
+            with self.subTest(duty=duty):
+                self.assertEqual(
+                    kinds(requirement={"education": "Не указано", "experience": 0}, requirements="", qualification="", duty=duty), []
+                )
+
+    def test_experience_written_as_from_n_years(self):
+        self.assertEqual(kinds(requirement={"education": "Высшее", "experience": "от 0"}, requirements="Внимательность.", qualification=""), [])
+        self.assertEqual(Vacancy(vacancy(requirement={"experience": "от 3 лет"})).number("requirement.experience"), 3.0)
 
     def test_unfilled_education_without_any_requirement_text_is_gap(self):
         (item,) = findings(requirement={"education": "Не указано", "experience": 0}, requirements="", qualification="")
@@ -291,6 +320,15 @@ class ScheduleTest(unittest.TestCase):
         self.assertEqual(item.conflict[0], {"field": "schedule", "value": "Полный рабочий день"})
         self.assertEqual(item.conflict[1]["field"], "duty")
 
+    def test_rotation_numbers_or_a_list_of_options_do_not_contradict_full_day(self):
+        for duty in (
+            "Работа за кассой и в торговом зале. График работы 2/2.",
+            "Работа за кассой. График работы 5/2, 2/2, возможен неполный рабочий день.",
+            "Приготовление блюд. Сменный график, пятидневная рабочая неделя.",
+        ):
+            with self.subTest(duty=duty):
+                self.assertNotIn(("schedule", "contradiction"), kinds(duty=duty))
+
     def test_five_day_week_does_not_contradict_full_day(self):
         self.assertEqual(kinds(duty="Проведение инъекций и забор крови. График 5/2."), [])
 
@@ -409,8 +447,11 @@ class WordingRulesTest(unittest.TestCase):
 
 class EmploymentTest(unittest.TestCase):
     def test_missing_type_is_gap_unless_text_says_it(self):
-        self.assertEqual(kinds(employment=None), [("employment", "gap")])
-        self.assertEqual(kinds(employment=None, duty="Проведение инъекций и забор крови. Полная занятость."), [])
+        self.assertEqual(kinds(**NO_TYPE), [("employment", "gap")])
+        # поле графика «полный/неполный рабочий день» уже говорит о занятости: портал часто не отдаёт её поле
+        self.assertEqual(kinds(employment=None), [])
+        self.assertEqual(kinds(employment=None, schedule="Режим гибкого рабочего времени", scheduleTypeComment="08.00 - 17.00 ПН-ПТ"), [("employment", "gap")])
+        self.assertEqual(kinds(**NO_TYPE, duty="Проведение инъекций и забор крови. Полная занятость."), [])
 
     def test_full_employment_with_part_time_schedule(self):
         result = findings(employment="Полная занятость", schedule="Неполный рабочий день/неполная рабочая неделя")

@@ -2,7 +2,7 @@ import json
 import re
 import unittest
 
-from tests.helpers import vacancy
+from tests.helpers import NO_TYPE, vacancy
 from tests.test_cli import CliCase
 from transparent_vacancy.analyzer import analyze_vacancies, build_report
 from transparent_vacancy.config import Settings
@@ -22,12 +22,12 @@ class HtmlTest(unittest.TestCase):
         return build_report(entries, ai, "file", "test.json", len(raw), duplicates)
 
     def test_page_embeds_the_whole_report(self):
-        report = self.report(vacancy(), vacancy(id="b", employment=None))
+        report = self.report(vacancy(), vacancy(id="b", **NO_TYPE))
         self.assertEqual(embedded(render_html(report)), report)
 
     def test_markup_in_vacancy_text_cannot_break_out_of_the_data_block(self):
         hostile = 'Монтаж</script><script>alert(1)</script><!-- и другие поручения'
-        report = self.report(vacancy(job__name=hostile, employment=None))
+        report = self.report(vacancy(job__name=hostile, **NO_TYPE))
         page = render_html(report)
         self.assertEqual(page.count("</script>"), 2)  # только два своих блока
         self.assertNotIn("<script>alert", page)

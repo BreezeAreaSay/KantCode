@@ -21,7 +21,7 @@ from .llm import AIError, ChatClient
 from .store import Cache
 from .vacancy import Vacancy, deduplicate
 
-RULES_VERSION = "3"
+RULES_VERSION = "4"
 FAILURES_TO_STOP = 3  # столько сбоев модели подряд, и остальные вакансии идут без неё
 
 

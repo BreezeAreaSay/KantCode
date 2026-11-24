@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.helpers import FakeModel, FakePortal, api_response, vacancy
+from tests.helpers import NO_TYPE, FakeModel, FakePortal, api_response, vacancy
 from transparent_vacancy import __version__, cli
 
 VAGUE_DUTY = "Проведение инъекций и забор крови. Возможны подмены."
@@ -295,7 +295,7 @@ class ScheduleCommandTest(CliCase):
         first = self.status()["finished_at"]
         cron, job, _ = loop.call_args.args
         self.assertEqual(cron.expression, "*/5 * * * *")
-        self.portal.vacancies[0]["employment"] = None
+        self.portal.vacancies[0].update(NO_TYPE)
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(job(), 0)  # то, что планировщик вызывает по сроку
         self.assertEqual(self.report()["vacancies"][0]["findings"][0]["topic"], "employment")
@@ -350,7 +350,7 @@ class CheckTest(CliCase):
     def test_check_reads_local_json_without_the_portal(self):
         source = self.write(
             "sample.json",
-            api_response([vacancy(id="a", duty=VAGUE_DUTY), vacancy(id="b", employment=None), vacancy(id="b", employment=None)]),
+            api_response([vacancy(id="a", duty=VAGUE_DUTY), vacancy(id="b", **NO_TYPE), vacancy(id="b", **NO_TYPE)]),
         )
         out = self.dir / "out.json"
         code, _ = self.call("check", source, "--out", str(out))
@@ -385,7 +385,7 @@ class CheckTest(CliCase):
 
     def test_require_ai_in_check_mode_saves_the_report_and_fails(self):
         self.model.fail = True
-        source = self.write("sample.json", api_response([vacancy(id="a", employment=None)]))
+        source = self.write("sample.json", api_response([vacancy(id="a", **NO_TYPE)]))
         out = self.dir / "out.json"
         code, output = self.call("check", source, "--out", str(out), "--require-ai")
         self.assertEqual(code, cli.EXIT_AI)

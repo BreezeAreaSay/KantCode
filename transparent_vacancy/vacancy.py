@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, Iterable
 
 from .textutil import clean_text, is_placeholder
@@ -70,7 +71,10 @@ def _as_number(value: Any) -> float | None:
         try:
             return float(digits)
         except ValueError:
-            return None
+            pass
+        # «от 0», «от 3 лет», «не менее 1 года»: так портал иногда пишет опыт
+        match = re.fullmatch(r"\s*(?:от|не\s+менее)\s*(\d+(?:[.,]\d+)?)\s*(?:лет|года?|г\.)?\s*", value, re.I)
+        return float(match.group(1).replace(",", ".")) if match else None
     return None
 
 
