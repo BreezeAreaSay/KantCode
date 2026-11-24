@@ -154,6 +154,14 @@ class RetryTest(unittest.TestCase):
         self.assertEqual(caught.exception.code, 401)
         self.assertEqual(len(model.requests), 1)
 
+    def test_spent_daily_limit_is_not_retried(self):
+        spent = {"error": {"message": "Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day", "code": 429}}
+        model, client = self.serve((429, spent))
+        with self.assertRaises(AIError) as caught:
+            client.complete_json("s", "u")
+        self.assertIn("free-models-per-day", str(caught.exception))
+        self.assertEqual(len(model.requests), 1)  # повторы только потратили бы попытки
+
     def test_pause_grows_and_follows_the_server_hint(self):
         model = ScriptedModel(self.BUSY, (429, {}, {"Retry-After": "7"}), (429, {}, {"Retry-After": "600"}), (200, chat("{}")))
         self.addCleanup(model.close)

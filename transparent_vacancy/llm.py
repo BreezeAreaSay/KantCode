@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -27,6 +28,7 @@ RETRY_CODES = {408, 425, 429, 500, 502, 503, 504, 529}
 # Сервер не понял запрос: так отвечают серверы, которые не знают response_format.
 BAD_REQUEST_CODES = {400, 404, 415, 422}
 MAX_PAUSE = 30.0
+_QUOTA_SPENT = re.compile(r"per[- ]day|daily|quota|credits|insufficient", re.I)
 
 
 def _opener(url: str) -> urllib.request.OpenerDirector:
@@ -76,6 +78,8 @@ class ChatClient:
                 return self._post_once(body)
             except AIError as error:
                 temporary = error.code in RETRY_CODES or error.code is None and "нет связи" in str(error)
+                if _QUOTA_SPENT.search(str(error)):
+                    temporary = False  # дневной лимит или пустой счёт: повтор только тратит попытки
                 if not temporary or attempt == self.retries:
                     raise
                 wait = error.retry_after if error.retry_after is not None else self.pause * attempt
