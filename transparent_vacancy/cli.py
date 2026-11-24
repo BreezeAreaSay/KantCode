@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
-from .analyzer import analyze_vacancies, build_report
+from .analyzer import analyze_vacancies, build_client, build_report
 from .config import ConfigError, Settings
 from .html_report import render_html
 from .letters import build_letters
@@ -42,10 +42,13 @@ def _summary(report: dict, path: Path) -> None:
         f"отчёт сохранён: {path} — вакансий {meta['vacancies']}, "
         f"с замечаниями {meta['vacancies_with_findings']}, замечаний {meta['findings_total']}"
     )
+    used = ", ".join(f"{name}: {count}" for name, count in ai["models_used"].items())
     log(
         f"ИИ: {ai['status']}, модель {ai['model'] or '—'}, разобрано {ai['vacancies_reviewed']}, "
         f"из кэша {ai['vacancies_from_cache']}, сбоев {ai['vacancies_failed']}, замечаний ИИ {ai['findings']}"
     )
+    if len(ai["models_used"]) > 1 or (ai["models_used"] and ai["model"] not in ai["models_used"]):
+        log(f"ИИ: вакансий по моделям — {used}")
     if ai["error"]:
         log(f"ИИ, последняя ошибка: {ai['error']}")
 
@@ -188,6 +191,19 @@ def write_letters(report_path: Path, out_dir: Path, only_id: str | None) -> int:
     return EXIT_OK
 
 
+def check_models(settings: Settings) -> int:
+    """Проверяет коротким запросом, какие из настроенных моделей отвечают прямо сейчас."""
+    results = build_client(settings).probe()
+    for label, state in results:
+        log(f"{label}: {'отвечает' if state == 'ok' else 'не отвечает — ' + state}")
+    working = [label for label, state in results if state == "ok"]
+    if not working:
+        log("ОШИБКА: ни одна модель не отвечает")
+        return EXIT_AI
+    log(f"разбор начнётся с модели {working[0]}")
+    return EXIT_OK
+
+
 def write_html(report_path: Path, out: Path) -> int:
     """Отчёт одной HTML-страницей с фильтрами: открывается в браузере без сервера."""
     report = read_json(report_path)
@@ -236,6 +252,8 @@ def build_parser() -> argparse.ArgumentParser:
     letters.add_argument("--out-dir", help="куда сохранить письма (по умолчанию <каталог отчёта>/letters)")
     letters.add_argument("--id", help="только вакансия с этим ID")
 
+    commands.add_parser("models", help="проверить, какие из настроенных моделей отвечают сейчас")
+
     html = commands.add_parser("html", help="отчёт одной HTML-страницей с фильтрами")
     html.add_argument("--report", help="отчёт (по умолчанию <каталог отчёта>/report.json)")
     html.add_argument("--out", help="куда сохранить страницу (по умолчанию рядом с отчётом, .html)")
@@ -253,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "html":
             report_path = Path(args.report) if args.report else settings.output_dir / REPORT_NAME
             return write_html(report_path, Path(args.out) if args.out else report_path.with_suffix(".html"))
+        if args.command == "models":
+            return check_models(settings)
         if args.no_ai:
             settings.ai_enabled = False
         if args.ai_limit is not None:

@@ -66,6 +66,13 @@ class ValuesTest(EnvCase):
                 self.assertEqual(self.load(TV_AI_ENABLED=raw, TV_AI_STRICT=raw).ai_enabled, expected)
                 self.assertEqual(self.load(TV_AI_ENABLED=raw, TV_AI_STRICT=raw).ai_strict, expected)
 
+    def test_fallback_models_are_a_comma_separated_list(self):
+        self.assertEqual(self.load().ai_fallback_models, ())
+        settings = self.load(TV_AI_FALLBACK_MODELS=" nvidia/nemotron-3.5-lightning:free, ,qwen2.5:7b@http://localhost:11434/v1 ")
+        self.assertEqual(
+            settings.ai_fallback_models, ("nvidia/nemotron-3.5-lightning:free", "qwen2.5:7b@http://localhost:11434/v1")
+        )
+
     def test_page_size_is_capped_by_the_portal_limit(self):
         self.assertEqual(self.load(TV_PAGE_SIZE="500").page_size, API_PAGE_LIMIT)
 

@@ -196,6 +196,84 @@ class RunTest(CliCase):
         self.assertEqual((report["meta"]["ai"]["status"], report["meta"]["ai"]["findings"]), ("ok", 10))
 
 
+class FallbackModelsTest(CliCase):
+    def test_busy_model_is_found_before_the_run_and_the_spare_one_does_the_work(self):
+        os.environ["TV_AI_FALLBACK_MODELS"] = "backup"
+        self.model.fail_models = {"stub"}
+        code, output = self.call("run", "--require-ai")
+        self.assertEqual(code, 0)
+        self.assertIn("проверка модели stub: не отвечает — HTTP 503", output)
+        self.assertIn("проверка модели backup: отвечает", output)
+        self.assertIn("вакансий по моделям — backup: 6", output)
+        report = self.report()
+        ai = report["meta"]["ai"]
+        self.assertEqual((ai["status"], ai["model"], ai["fallback_models"]), ("ok", "stub", ["backup"]))
+        self.assertEqual(ai["models_used"], {"backup": 6})
+        self.assertEqual(ai["models_checked"]["backup"], "ok")
+        self.assertIn("HTTP 503", ai["models_checked"]["stub"])
+        self.assertEqual({item["ai_model"] for item in report["vacancies"]}, {"backup"})
+        self.assertEqual(set(self.model.asked), {"backup"})  # занятую модель по вакансиям не спрашивали
+        self.assertEqual(self.model.probes, 2)
+
+    def test_model_that_gets_busy_in_the_middle_of_the_run(self):
+        os.environ["TV_AI_FALLBACK_MODELS"] = "backup"
+        answered = []
+
+        def reply(fields):
+            answered.append(1)
+            if len(answered) == 2:
+                self.model.fail_models = {"stub"}  # после второй вакансии основная модель упирается в лимит
+            return model_reply(fields)
+
+        self.model.reply = reply
+        code, output = self.call("run", "--require-ai")
+        self.assertEqual(code, 0)
+        self.assertIn("модель stub не ответила (HTTP 503), запрос уходит модели backup", output)
+        report = self.report()
+        self.assertEqual(report["meta"]["ai"]["models_used"], {"stub": 2, "backup": 4})
+        self.assertEqual([item["ai_model"] for item in report["vacancies"]], ["stub", "stub"] + ["backup"] * 4)
+        self.assertEqual(self.model.asked.count("stub"), 3)  # третий запрос показал лимит, дальше её не трогали
+
+    def test_no_model_answers(self):
+        os.environ["TV_AI_FALLBACK_MODELS"] = "backup"
+        self.model.fail = True
+        code, output = self.call("run")
+        self.assertEqual(code, 0)
+        self.assertIn("ни одна модель не ответила", output)
+        ai = self.report()["meta"]["ai"]
+        self.assertEqual((ai["status"], ai["vacancies_skipped"], ai["models_used"]), ("unavailable", 6, {}))
+        self.assertEqual(self.model.calls, 0)  # хватило проверки: по вакансиям запросы не уходили
+        self.assertEqual({item["ai_model"] for item in self.report()["vacancies"]}, {None})
+
+    def test_models_are_not_checked_when_everything_comes_from_the_cache(self):
+        self.call("run")
+        probes = self.model.probes
+        self.assertEqual(probes, 1)
+        self.call("run")
+        self.assertEqual(self.model.probes, probes)
+        ai = self.report()["meta"]["ai"]
+        self.assertEqual((ai["models_used"], ai["models_checked"]), ({"stub": 6}, {}))
+        self.assertEqual({item["ai_model"] for item in self.report()["vacancies"]}, {"stub"})
+
+    def test_models_are_not_checked_without_ai(self):
+        self.call("run", "--no-ai")
+        self.assertEqual((self.model.probes, self.model.calls), (0, 0))
+
+    def test_models_command(self):
+        os.environ["TV_AI_FALLBACK_MODELS"] = "backup, third"
+        self.model.fail_models = {"stub", "third"}
+        code, output = self.call("models")
+        self.assertEqual(code, 0)
+        self.assertIn("stub: не отвечает — HTTP 503", output)
+        self.assertIn("backup: отвечает", output)
+        self.assertIn("разбор начнётся с модели backup", output)
+        self.assertEqual((self.model.probes, self.model.calls), (3, 0))
+        self.model.fail = True
+        code, output = self.call("models")
+        self.assertEqual(code, cli.EXIT_AI)
+        self.assertIn("ни одна модель не отвечает", output)
+
+
 class ScheduleCommandTest(CliCase):
     def test_schedule_runs_the_same_job_as_the_manual_run(self):
         with mock.patch.object(cli, "run_forever") as loop:

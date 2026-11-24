@@ -30,6 +30,7 @@ services:
       TV_SCHEDULE: ${TV_SCHEDULE:-0 6 * * *}
       TV_AI_BASE_URL: ${TV_AI_BASE_URL:-http://ollama:11434/v1}
       TV_AI_MODEL: ${TV_AI_MODEL:-qwen2.5:7b}
+      TV_AI_FALLBACK_MODELS: ${TV_AI_FALLBACK_MODELS:-}
       TV_AI_API_KEY: ${TV_AI_API_KEY:-}
       TV_AI_TIMEOUT: ${TV_AI_TIMEOUT:-600}
       TZ: Europe/Kaliningrad
