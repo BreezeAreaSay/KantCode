@@ -69,6 +69,10 @@ def run_once(settings: Settings, require_ai: bool = False) -> int:
             settings.http_timeout,
             settings.http_retries,
         )
+        if not fetched.vacancies:
+            # На неверный адрес или фильтр портал отвечает «успешно, 0 записей».
+            # Пустой отчёт затёр бы прошлый, поэтому это сбой источника, а не результат.
+            raise SourceError(f"{settings.source_url}: источник не вернул ни одной вакансии")
     except SourceError as error:
         kept = report_path.is_file()
         write_json(
