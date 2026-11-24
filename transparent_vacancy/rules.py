@@ -66,6 +66,39 @@ _GENERIC_TITLES = {
 }
 
 
+_ENTRY_LEVEL = re.compile(r"^(?:младш\w+|стаж[её]р\w*|начинающ\w+|ученик\w*)\b", I)
+ENTRY_LEVEL_MAX_YEARS = 3  # с такого стажа «младший» в названии уже расходится с требованиями
+
+
+def _title_against_experience(vacancy: Vacancy, title: str) -> list[Finding]:
+    """Название говорит о начальном уровне, а требуется несколько лет опыта."""
+    if not _ENTRY_LEVEL.search(title):
+        return []
+    sides: list[tuple[int, str, str]] = []
+    stated = vacancy.number("requirement.experience")
+    if stated is not None and stated >= ENTRY_LEVEL_MAX_YEARS:
+        sides.append((int(stated), "requirement.experience", vacancy.get("requirement.experience")))
+    for name, text in vacancy.free_text():
+        for match in _EXPERIENCE_YEARS.finditer(text):
+            years = int(match.group(1) or match.group(2))
+            if years >= ENTRY_LEVEL_MAX_YEARS and not _optional_nearby(text, match.start(), match.end()):
+                sides.append((years, name, excerpt(text, match.start(), match.end())))
+    if not sides:
+        return []
+    years, name, quote = max(sides)
+    return [
+        Finding(
+            "title",
+            CONTRADICTION,
+            "job-name",
+            title,
+            f"Название должности говорит о начальном уровне, а в требованиях назван опыт от {years} лет.",
+            "Уточните у работодателя, на какой уровень открыта вакансия, и приведите название и требования к одному варианту.",
+            conflict=[{"field": "job-name", "value": title}, {"field": name, "value": quote}],
+        )
+    ]
+
+
 def check_title(vacancy: Vacancy) -> list[Finding]:
     title = vacancy.get("job-name")
     if not title:
@@ -90,7 +123,7 @@ def check_title(vacancy: Vacancy) -> list[Finding]:
                 "Уточните у работодателя полное название должности с направлением или участком работы.",
             )
         ]
-    return []
+    return _title_against_experience(vacancy, title)
 
 
 # --- обязанности -------------------------------------------------------------
@@ -684,8 +717,43 @@ def _format_conflict(vacancy: Vacancy) -> list[Finding]:
     ]
 
 
+_WORK_CITY = re.compile(
+    r"(?i:работа\w*|офис\w*|рабочее\s+место|место\s+работы)\s+(?:\w+\s+){0,3}?в\s+(?:г\.?\s*|городе\s+)([А-ЯЁ][а-яё]+(?:-[А-ЯЁ][а-яё]+)?)"
+)
+
+
+def _city_conflict(vacancy: Vacancy) -> list[Finding]:
+    """В тексте место работы в одном городе, а в адресе этого города нет."""
+    names = vacancy.location_fields
+    if not names:
+        return []
+    addresses = fold(" ".join(vacancy.get(name) for name in names))
+    for name, text in vacancy.free_text():
+        for match in _WORK_CITY.finditer(text):
+            city = fold(match.group(1))
+            stem = city[: max(4, len(city) - 2)]  # «Светлогорске» → «светлогор»: падеж не мешает сравнению
+            if stem in addresses:
+                continue
+            quote = excerpt(text, match.start(), match.end()).rstrip(" .,")
+            return [
+                Finding(
+                    "location",
+                    CONTRADICTION,
+                    name,
+                    quote,
+                    "Место работы указано по-разному: в описании назван один город, в адресе другой.",
+                    "Уточните у работодателя, в каком городе находится рабочее место, и приведите описание и адрес к одному значению.",
+                    conflict=[
+                        {"field": name, "value": quote},
+                        {"field": names[0], "value": vacancy.get(names[0])},
+                    ],
+                )
+            ]
+    return []
+
+
 def check_location(vacancy: Vacancy, facts: Facts) -> list[Finding]:
-    return _format_conflict(vacancy) + _check_address(vacancy, facts)
+    return _format_conflict(vacancy) + _city_conflict(vacancy) + _check_address(vacancy, facts)
 
 
 def _check_address(vacancy: Vacancy, facts: Facts) -> list[Finding]:
@@ -809,6 +877,113 @@ def check_employment(vacancy: Vacancy, facts: Facts) -> list[Finding]:
     return []
 
 
+# --- оговорки в свободном тексте ---------------------------------------------
+# То, что раньше замечала только модель: условие отложено «до собеседования»
+# или названо возможным без частоты и правил. Правила должны находить это и без неё.
+
+_SENTENCE = re.compile(r"[^.;!?\n]+")
+_DEFERRED = re.compile(
+    r"(?:уточня\w+|обсужда\w+|оговарива\w+|определя\w+|согласовыва\w+)\s+(?:\w+\s+){0,3}?"
+    r"(?:на|при|по\s+(?:результатам|итогам))\s+собеседовани\w+"
+    r"|\b(?:формат\w*|график\w*|режим\w*|условия|оплат\w+|зарплат\w+|адрес\w*|место\s+работы|требовани\w+)\s+"
+    r"(?:\w+\s+){0,3}?(?:обсужда\w+|уточня\w+|оговарива\w+|по\s+договор[её]нности|по\s+согласованию)",
+    I,
+)
+_POSSIBLE = re.compile(
+    r"\b(?:возмож\w+|иногда|периодическ\w+)\s+(?:\w+\s+){0,2}?"
+    r"(?:(?P<trips>командировк\w+|выезд\w+|разъезд\w+)"
+    r"|(?P<hours>переработк\w+|сверхурочн\w+|ночн\w+\s+смен\w+|дежурств\w+|работ\w+\s+в\s+выходн\w+|в\s+выходн\w+)"
+    r"|(?P<remote>удал[её]нн\w+\s+работ\w+|дистанционн\w+\s+работ\w+))",
+    I,
+)
+_TOPIC_WORDS = (
+    ("location", re.compile(r"адрес\w*|мест\w+\s+работы|рабоч\w+\s+мест\w+|формат\w*|удал[её]нн\w+|дистанционн\w+|офис\w*", I)),
+    ("schedule", re.compile(r"график\w*|режим\w*|смен\w+|выходн\w+|час\w+\s+работы|рабоч\w+\s+врем\w+", I)),
+    ("salary", re.compile(r"оплат\w+|зарплат\w+|заработн\w+|оклад\w*|доход\w*|преми\w+", I)),
+    ("requirements", re.compile(r"требовани\w+|опыт\w*|знани\w+|навык\w*|образовани\w+|квалификац\w+", I)),
+    ("duties", re.compile(r"обязанност\w+|задач\w*|функци\w+|поручени\w+", I)),
+    ("employment", re.compile(r"занятост\w+|оформлени\w+|договор\w*\b|ставк\w+", I)),
+)
+_FIELD_TOPIC = {
+    "duty": "duties",
+    "requirements": "requirements",
+    "qualification": "requirements",
+    "requirement.qualification": "requirements",
+    "scheduleTypeComment": "schedule",
+    "term.text": "employment",
+}
+_ASK = {
+    "title": "Уточните у работодателя точное название должности и впишите его в вакансию.",
+    "duties": "Уточните у работодателя, какие задачи имеются в виду, и впишите их в вакансию.",
+    "requirements": "Уточните у работодателя обязательные требования к кандидату и впишите их в вакансию.",
+    "salary": "Уточните у работодателя размер оплаты и из чего она складывается и впишите это в вакансию.",
+    "schedule": "Уточните у работодателя рабочие дни и время начала и окончания работы и впишите их в вакансию.",
+    "location": "Уточните у работодателя, где выполняется работа: адрес и можно ли работать удалённо, и впишите это в вакансию.",
+    "employment": "Уточните у работодателя тип занятости и порядок оформления и впишите их в вакансию.",
+}
+_POSSIBLE_KINDS = {
+    "trips": ("duties", "Уточните у работодателя, как часто бывают такие поездки, куда и на какой срок."),
+    "hours": ("schedule", "Уточните у работодателя, как часто это бывает и как учитывается и оплачивается такое время."),
+    "remote": ("location", "Уточните у работодателя, сколько времени можно работать удалённо и от чего это зависит."),
+}
+
+
+def _overlaps(first: str, second: str) -> bool:
+    first, second = fold(first), fold(second)
+    return bool(first and second) and (first in second or second in first)
+
+
+def check_wording(vacancy: Vacancy, facts: Facts, known: list[Finding]) -> list[Finding]:
+    """Оговорки в тексте: «уточняется на собеседовании», «возможны командировки»."""
+    concrete = {"salary": facts.salary_concrete, "schedule": facts.schedule_concrete}
+    found: list[Finding] = []
+
+    def taken(topic: str, quote: str) -> bool:
+        return any(item.topic == topic and _overlaps(item.quote, quote) for item in known + found)
+
+    for name, text in vacancy.free_text():
+        for sentence in _SENTENCE.finditer(text):
+            piece = sentence.group(0).strip(" ,:—–-")
+            if len(piece) > 200:
+                continue  # длинный кусок без точек: это не одна фраза, цитировать его целиком нельзя
+            if _DEFERRED.search(piece):
+                topic = next((key for key, words in _TOPIC_WORDS if words.search(piece)), None)
+                by_field = topic is None
+                topic = topic or _FIELD_TOPIC.get(name, "duties")
+                if concrete.get(topic) or taken(topic, piece):
+                    continue  # по теме есть конкретные сведения или об этой фразе уже сказано
+                if by_field and any(item.topic == topic for item in known + found):
+                    continue  # фраза обо всём сразу, а по теме поля замечание уже есть
+                found.append(
+                    Finding(
+                        topic,
+                        AMBIGUITY,
+                        name,
+                        piece,
+                        "Условие не названо, а отложено до собеседования или договорённости: из вакансии его не узнать.",
+                        _ASK[topic],
+                    )
+                )
+                continue
+            match = _POSSIBLE.search(piece)
+            if match:
+                topic, advice = _POSSIBLE_KINDS[match.lastgroup]
+                quote = excerpt(piece, match.start(), match.end()).strip(" ,.")
+                if taken(topic, quote):
+                    continue
+                found.append(
+                    Finding(
+                        topic,
+                        AMBIGUITY,
+                        name,
+                        quote,
+                        "Сказано, что это возможно, но не сказано, как часто и на каких условиях.",
+                        advice,
+                    )
+                )
+    return found
+
+
 # Общие слова о теме. Если по теме есть конкретные сведения, такая фраза не проблема.
 GENERIC_VAGUE = {"salary": _VAGUE_SALARY, "schedule": _VAGUE_SCHEDULE}
 
@@ -824,4 +999,5 @@ def analyze(vacancy: Vacancy) -> tuple[list[Finding], Facts]:
     findings += check_schedule(vacancy, facts)
     findings += check_location(vacancy, facts)
     findings += check_employment(vacancy, facts)
+    findings += check_wording(vacancy, facts, findings)
     return findings, facts

@@ -18,7 +18,7 @@ EXPECTED = {
         ("schedule", "ambiguity"),
         ("location", "ambiguity"),
     ],
-    "DEMO-39-003": [("requirements", "contradiction"), ("location", "ambiguity")],
+    "DEMO-39-003": [("title", "contradiction"), ("requirements", "contradiction"), ("location", "ambiguity")],
     "DEMO-39-004": [("location", "contradiction")],
     "DEMO-39-005": [],
     "DEMO-39-006": [
@@ -31,7 +31,18 @@ EXPECTED = {
     "DEMO-39-007": [],
     "DEMO-39-008": [("schedule", "ambiguity")],
     "DEMO-39-009": [],
-    "DEMO-39-010": [("location", "ambiguity")],
+    "DEMO-39-010": [("location", "ambiguity"), ("location", "ambiguity")],
+}
+
+# Наш набор: шесть вакансий с заложенными дефектами. Правила находят их все без модели.
+OWN_SAMPLE = SAMPLE.parent / "sample_vacancies.json"
+OWN_EXPECTED = {
+    "0101": [("duties", "ambiguity"), ("schedule", "ambiguity"), ("schedule", "ambiguity")],
+    "0102": [("salary", "gap"), ("duties", "ambiguity")],
+    "0103": [("location", "contradiction")],
+    "0104": [("salary", "ambiguity")],
+    "0105": [("schedule", "ambiguity"), ("schedule", "ambiguity")],
+    "0106": [("location", "ambiguity"), ("requirements", "ambiguity")],
 }
 
 
@@ -57,3 +68,14 @@ class TrainingSampleTest(unittest.TestCase):
                         self.assertEqual(len(item.conflict), 2)
                         for side in item.conflict:
                             self.assertIn(side["value"], vacancy.get(side["field"]))
+
+
+class OwnSampleTest(unittest.TestCase):
+    def test_rules_alone_find_every_planted_defect(self):
+        payload = json.loads(OWN_SAMPLE.read_text(encoding="utf-8"))
+        planted = {vacancy.id[-4:]: vacancy for vacancy in map(Vacancy, extract_vacancies(payload)) if vacancy.id[-4:] in OWN_EXPECTED}
+        self.assertEqual(sorted(planted), sorted(OWN_EXPECTED))
+        for key, vacancy in planted.items():
+            with self.subTest(id=key):
+                found = [(item.topic, item.kind) for item in rules.analyze(vacancy)[0]]
+                self.assertEqual(found, OWN_EXPECTED[key])

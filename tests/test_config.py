@@ -77,8 +77,14 @@ class ValuesTest(EnvCase):
         settings = self.load(TV_AI_API_KEY="sk-or-test")
         self.assertEqual(settings.ai_base_url, "https://openrouter.ai/api/v1")
         self.assertEqual(settings.ai_model, "nvidia/nemotron-3-ultra-550b-a55b:free")
-        self.assertEqual(settings.ai_fallback_models, ("nvidia/nemotron-3.5-lightning:free",))
+        # запасные: вторая бесплатная модель, затем локальная, если она запущена
+        self.assertEqual(
+            settings.ai_fallback_models,
+            ("nvidia/nemotron-3.5-lightning:free", "qwen2.5:7b@http://localhost:11434/v1"),
+        )
         self.assertEqual((settings.ai_api_key, settings.ai_timeout), ("sk-or-test", 600))
+        docker = self.load(TV_AI_LOCAL_URL="http://ollama:11434/v1", TV_AI_LOCAL_MODEL="gemma3:4b")
+        self.assertEqual(docker.ai_fallback_models[-1], "gemma3:4b@http://ollama:11434/v1")
 
     def test_a_key_with_an_address_or_a_model_keeps_what_is_given(self):
         other = self.load(TV_AI_API_KEY="sk-1", TV_AI_BASE_URL="https://api.example.org/v1", TV_AI_MODEL="some-model")
